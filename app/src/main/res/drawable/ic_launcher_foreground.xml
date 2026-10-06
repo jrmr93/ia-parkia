@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Blue Rounded Shield / Plate -->
+    <path
+        android:fillColor="#2563EB"
+        android:pathData="M34,26 h40 c4.4,0 8,3.6 8,8 v40 c0,4.4 -3.6,8 -8,8 h-40 c-4.4,0 -8,-3.6 -8,-8 v-40 c0,-4.4 3.6,-8 8,-8 z" />
+    
+    <!-- Bold Letter 'P' for Parking in crisp white -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M44,36 h12 c5.5,0 10,4.5 10,10 c0,5.5 -4.5,10 -10,10 h-6 v14 h-6 v-34 z M50,42 v8 h6 c2.2,0 4,-1.8 4,-4 c0,-2.2 -1.8,-4 -4,-4 h-6 z" />
+
+    <!-- Small smart accent / electric dot -->
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M66,66 A3,3 0 1,0 66,72 A3,3 0 1,0 66,66" />
+</vector>

@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Parkia</string>
+    <string name="app_subtitle">Control de Parqueo Inteligente</string>
+    <string name="app_creator">Creado por Justo Maldonado Ruiz</string>
+</resources>

@@ -1,0 +1,66 @@
+package com.example.util
+
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import com.example.R
+import java.util.Locale
+
+object NotificationHelper {
+
+    private const val CHANNEL_ID = "parkia_balance_channel"
+    private const val NOTIFICATION_ID = 1001
+
+    fun createNotificationChannel(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val name = "Actualización de Saldo Parkia"
+            val descriptionText = "Notifica cada minuto el saldo actual y fecha de actualización"
+            val importance = NotificationManager.IMPORTANCE_LOW
+            val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
+                description = descriptionText
+                setShowBadge(false)
+            }
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    fun showBalanceNotification(
+        context: Context,
+        balance: Double,
+        isSessionActive: Boolean,
+        formattedDateTime: String
+    ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                return
+            }
+        }
+
+        val stateText = if (isSessionActive) "En Sesión Activa" else "En Reposo"
+        val balanceText = String.format(Locale.US, "$%.2f USD", balance)
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle("Parkia - Saldo: $balanceText")
+            .setContentText("Actualizado: $formattedDateTime • $stateText")
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(isSessionActive)
+            .setOnlyAlertOnce(true)
+
+        try {
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())
+        } catch (_: SecurityException) {
+            // Handled gracefully if permission denied
+        }
+    }
+}
