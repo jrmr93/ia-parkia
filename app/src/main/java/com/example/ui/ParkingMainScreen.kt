@@ -15,7 +15,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -45,16 +49,32 @@ fun ParkingMainScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Request notification permission on Android 13+
+    // Request notification permission on Android 13+ only if not granted
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        val permissionLauncher = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.RequestPermission()
-        ) { /* permission handled gracefully */ }
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val activity = context as? androidx.fragment.app.FragmentActivity
+        val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.POST_NOTIFICATIONS
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
-        LaunchedEffect(Unit) {
-            permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        var hasCheckedPermission by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(hasPermission) }
+
+        if (!hasCheckedPermission && activity != null) {
+            LaunchedEffect(Unit) {
+                hasCheckedPermission = true
+                com.example.util.SecurityManager.isRequestingPermission = true
+                androidx.core.app.ActivityCompat.requestPermissions(
+                    activity,
+                    arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                    1001
+                )
+                kotlinx.coroutines.delay(1000)
+                com.example.util.SecurityManager.isRequestingPermission = false
+            }
         }
     }
+
 
     // Register lifecycle observer to trigger catch-up on ON_RESUME
     DisposableEffect(lifecycleOwner) {

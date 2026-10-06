@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.withResumed
 import com.example.ui.theme.ErrorRed
 import com.example.ui.theme.SlateBlue
 import com.example.util.SecurityManager
@@ -70,13 +71,18 @@ fun SecurityLockScreen(
     // Auto-launch biometric prompt if unlocking and biometrics available
     LaunchedEffect(Unit) {
         if (!isInitialSetup && canUseBiometrics && activity != null) {
-            SecurityManager.launchBiometricPrompt(
-                activity = activity,
-                onSuccess = onAuthenticated,
-                onError = { /* handled gracefully; user can use PIN or click button */ }
-            )
+            activity.lifecycle.withResumed {
+                if (!activity.supportFragmentManager.isStateSaved && !SecurityManager.isAuthenticating) {
+                    SecurityManager.launchBiometricPrompt(
+                        activity = activity,
+                        onSuccess = onAuthenticated,
+                        onError = { err -> errorMessage = err }
+                    )
+                }
+            }
         }
     }
+
 
     Box(
         modifier = Modifier

@@ -6,7 +6,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.fragment.app.FragmentActivity
 import com.example.ui.ParkingMainScreen
@@ -19,16 +18,21 @@ import com.example.util.SecurityManager
 class MainActivity : FragmentActivity() {
 
   private val parkingViewModel: ParkingViewModel by viewModels()
+  private var isUnlocked by mutableStateOf(false)
+  private var shouldReLockOnResume = false
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
     NotificationHelper.createNotificationChannel(this)
 
+    if (savedInstanceState != null) {
+      isUnlocked = savedInstanceState.getBoolean("KEY_IS_UNLOCKED", false)
+    }
+
     setContent {
       MyApplicationTheme {
-        var isUnlocked by remember { mutableStateOf(false) }
-        val isPinConfigured = remember { SecurityManager.isPinConfigured(this@MainActivity) }
+        val isPinConfigured = SecurityManager.isPinConfigured(this@MainActivity)
 
         if (!isUnlocked) {
           SecurityLockScreen(
@@ -44,8 +48,26 @@ class MainActivity : FragmentActivity() {
     }
   }
 
+  override fun onSaveInstanceState(outState: Bundle) {
+    super.onSaveInstanceState(outState)
+    outState.putBoolean("KEY_IS_UNLOCKED", isUnlocked)
+  }
+
+  override fun onStop() {
+    super.onStop()
+    if (!SecurityManager.isAuthenticating && !SecurityManager.isRequestingPermission && SecurityManager.isPinConfigured(this)) {
+      shouldReLockOnResume = true
+    }
+  }
+
   override fun onResume() {
     super.onResume()
+    if (shouldReLockOnResume) {
+      shouldReLockOnResume = false
+      if (!SecurityManager.isAuthenticating && !SecurityManager.isRequestingPermission && SecurityManager.isPinConfigured(this)) {
+        isUnlocked = false
+      }
+    }
     parkingViewModel.onAppResume()
   }
 }

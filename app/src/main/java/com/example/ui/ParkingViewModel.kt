@@ -74,10 +74,10 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                     _uiState.update { it.copy(config = updatedConfig) }
                     recalculateDerivedValues()
                     manageTicker(updatedConfig)
-                    postRealtimeNotification()
                 }
             }
         }
+
 
         // Collect history updates reactively from Room
         viewModelScope.launch {

@@ -1,0 +1,33 @@
+@"
+# Gradle
+.gradle/
+**/.gradle/
+
+# Build
+build/
+**/build/
+
+# Local configuration
+local.properties
+
+# Environment variables / secrets
+.env
+
+# IDE
+.idea/
+*.iml
+
+# Android
+.externalNativeBuild/
+.cxx/
+
+# Generated files
+captures/
+"@ | Set-Content .gitignore
+# Java heap dumps
+*.hprof
+*.heapdump
+
+# Java heap dumps
+*.hprof
+*.heapdump

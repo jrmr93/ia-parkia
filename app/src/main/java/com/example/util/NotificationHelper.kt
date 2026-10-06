@@ -19,14 +19,14 @@ object NotificationHelper {
     fun createNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val name = "Actualización de Saldo Parkia"
-            val descriptionText = "Notifica cada minuto el saldo actual y fecha de actualización"
+            val descriptionText = "Notifica el saldo actual y fecha de actualización"
             val importance = NotificationManager.IMPORTANCE_LOW
             val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
                 description = descriptionText
                 setShowBadge(false)
             }
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            notificationManager?.createNotificationChannel(channel)
         }
     }
 
@@ -50,7 +50,7 @@ object NotificationHelper {
         val balanceText = String.format(Locale.US, "$%.2f USD", balance)
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("Parkia - Saldo: $balanceText")
             .setContentText("Actualizado: $formattedDateTime • $stateText")
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -59,8 +59,9 @@ object NotificationHelper {
 
         try {
             NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())
-        } catch (_: SecurityException) {
-            // Handled gracefully if permission denied
+        } catch (_: Throwable) {
+            // Catch any notification system exception gracefully
         }
     }
 }
+

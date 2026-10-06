@@ -11,6 +11,12 @@ object SecurityManager {
     private const val PREFS_NAME = "parkia_security_prefs"
     private const val KEY_PIN = "security_pin"
 
+    @Volatile
+    var isAuthenticating: Boolean = false
+
+    @Volatile
+    var isRequestingPermission: Boolean = false
+
     fun isPinConfigured(context: Context): Boolean {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         return prefs.getString(KEY_PIN, null) != null
@@ -38,6 +44,13 @@ object SecurityManager {
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
+        if (activity.supportFragmentManager.isStateSaved ||
+            !activity.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
+        ) {
+            return
+        }
+
+        isAuthenticating = true
         val executor = ContextCompat.getMainExecutor(activity)
         val biometricPrompt = BiometricPrompt(
             activity,
@@ -45,28 +58,44 @@ object SecurityManager {
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     super.onAuthenticationSucceeded(result)
-                    onSuccess()
+                    isAuthenticating = false
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        onSuccess()
+                    }, 250)
                 }
+
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                     super.onAuthenticationError(errorCode, errString)
-                    // If user cancels or clicks negative button to use PIN, we handle gracefully
-                    onError(errString.toString())
+                    isAuthenticating = false
+                    if (errorCode != BiometricPrompt.ERROR_USER_CANCELED && errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
+                        onError(errString.toString())
+                    }
                 }
 
                 override fun onAuthenticationFailed() {
                     super.onAuthenticationFailed()
-                    onError("Huella no reconocida. Intenta de nuevo o ingresa tu PIN.")
+                    isAuthenticating = false
+                    onError("Autenticación biométrica no reconocida. Intenta de nuevo o ingresa tu PIN.")
                 }
             }
         )
 
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setTitle("Autenticación Parkia")
-            .setSubtitle("Confirma tu identidad con biometría del dispositivo")
-            .setNegativeButtonText("Usar PIN de acceso")
+            .setSubtitle("Confirma tu identidad para ingresar")
+            .setNegativeButtonText("Usar PIN de la app")
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.BIOMETRIC_WEAK)
             .build()
 
-        biometricPrompt.authenticate(promptInfo)
+        try {
+            biometricPrompt.authenticate(promptInfo)
+        } catch (ex: Exception) {
+            isAuthenticating = false
+            onError("Ingresa tu PIN de 4 dígitos para acceder.")
+        }
     }
 }
+
+
+
