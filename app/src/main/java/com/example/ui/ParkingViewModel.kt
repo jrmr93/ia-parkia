@@ -64,10 +64,12 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                 _uiState.update { it.copy(showExhaustedBalanceAlert = true) }
             }
             recalculateDerivedValues()
-            postRealtimeNotification()
+            if (initial.notificationsEnabled) {
+                com.example.service.ParkiaForegroundService.startOrUpdate(getApplication(), forceUpdate = false)
+            }
         }
 
-        // Collect config updates reactively from Room
+        // Collect config updates reactively from Room for UI screen updates
         viewModelScope.launch {
             repository.configFlow.collect { updatedConfig ->
                 if (updatedConfig != null) {
@@ -77,7 +79,6 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
         }
-
 
         // Collect history updates reactively from Room
         viewModelScope.launch {
@@ -92,15 +93,6 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
         }
-
-        // Background periodic loop: notifies in real time EVERY MINUTE
-        viewModelScope.launch {
-            while (isActive) {
-                delay(60000L) // every 1 minute
-                recalculateDerivedValues()
-                postRealtimeNotification()
-            }
-        }
     }
 
     /**
@@ -108,6 +100,7 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
      */
     private fun postRealtimeNotification() {
         val config = _uiState.value.config
+        if (!config.notificationsEnabled) return
         val nowFormatted = dateTimeFormat.format(Date())
         NotificationHelper.showBalanceNotification(
             context = getApplication(),
@@ -272,6 +265,21 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
     fun updateTariff(amount: Double, minutes: Int) {
         viewModelScope.launch {
             repository.updateTariff(amount, minutes)
+            recalculateDerivedValues()
+            postRealtimeNotification()
+        }
+    }
+
+    fun updateTariffAndNotifications(amount: Double, minutes: Int, notifyEnabled: Boolean, notifyInterval: Int) {
+        viewModelScope.launch {
+            repository.updateTariff(amount, minutes)
+            repository.updateNotificationSettings(notifyEnabled, notifyInterval)
+            if (notifyEnabled) {
+                com.example.service.ParkiaForegroundService.startOrUpdate(getApplication(), forceUpdate = true)
+            } else {
+                com.example.service.ParkiaForegroundService.stop(getApplication())
+            }
+            com.example.util.BalanceNotificationWorker.scheduleOrCancel(getApplication(), notifyEnabled, notifyInterval)
             recalculateDerivedValues()
             postRealtimeNotification()
         }

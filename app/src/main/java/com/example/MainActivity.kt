@@ -19,7 +19,11 @@ class MainActivity : FragmentActivity() {
 
   private val parkingViewModel: ParkingViewModel by viewModels()
   private var isUnlocked by mutableStateOf(false)
-  private var shouldReLockOnResume = false
+  private var backgroundTimestamp = 0L
+
+  companion object {
+    private const val LOCK_TIMEOUT_MS = 3 * 60 * 1000L // 3 minutos
+  }
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -56,15 +60,16 @@ class MainActivity : FragmentActivity() {
   override fun onStop() {
     super.onStop()
     if (!SecurityManager.isAuthenticating && !SecurityManager.isRequestingPermission && SecurityManager.isPinConfigured(this)) {
-      shouldReLockOnResume = true
+      backgroundTimestamp = System.currentTimeMillis()
     }
   }
 
   override fun onResume() {
     super.onResume()
-    if (shouldReLockOnResume) {
-      shouldReLockOnResume = false
-      if (!SecurityManager.isAuthenticating && !SecurityManager.isRequestingPermission && SecurityManager.isPinConfigured(this)) {
+    if (backgroundTimestamp > 0L) {
+      val elapsed = System.currentTimeMillis() - backgroundTimestamp
+      backgroundTimestamp = 0L
+      if (elapsed >= LOCK_TIMEOUT_MS && !SecurityManager.isAuthenticating && !SecurityManager.isRequestingPermission && SecurityManager.isPinConfigured(this)) {
         isUnlocked = false
       }
     }

@@ -1,21 +1,32 @@
 package com.example.ui.components
 
+import android.os.Build
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Pin
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
@@ -27,6 +38,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -34,17 +47,22 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.ErrorRed
 import com.example.ui.theme.SlateBlue
 import com.example.ui.theme.WarningAmber
+import com.example.util.SecurityManager
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -68,7 +86,7 @@ fun RechargeCustomDialog(
         },
         title = {
             Text(
-                "Recargar Saldo Personalizado",
+                "Recargar Saldo",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF0F172A)
@@ -185,12 +203,27 @@ fun ResetBalanceDialog(
 fun TariffSettingsDialog(
     currentAmount: Double,
     currentMinutes: Int,
+    notificationsEnabled: Boolean,
+    notificationIntervalMinutes: Int,
     onDismiss: () -> Unit,
-    onConfirm: (amount: Double, minutes: Int) -> Unit
+    onConfirm: (amount: Double, minutes: Int, notifyEnabled: Boolean, notifyInterval: Int) -> Unit
 ) {
     var amountText by remember { mutableStateOf(String.format(Locale.US, "%.2f", currentAmount)) }
     var minutesText by remember { mutableStateOf(currentMinutes.toString()) }
+    var notifyEnabled by remember { mutableStateOf(notificationsEnabled) }
+    var intervalText by remember { mutableStateOf(notificationIntervalMinutes.toString()) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showChangePinModal by remember { mutableStateOf(false) }
+    var showQuickTileInstructions by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    if (showChangePinModal) {
+        ChangePinDialog(onDismiss = { showChangePinModal = false })
+    }
+
+    if (showQuickTileInstructions) {
+        QuickTileInstructionsDialog(onDismiss = { showQuickTileInstructions = false })
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -198,13 +231,13 @@ fun TariffSettingsDialog(
         icon = {
             Icon(
                 Icons.Default.Tune,
-                contentDescription = "Configurar Tarifa",
+                contentDescription = "Configuración App",
                 tint = SlateBlue
             )
         },
         title = {
             Text(
-                "Configurar Tarifa por Bloque",
+                "Ajustes de Tarifa y Notificaciones",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF0F172A)
@@ -213,11 +246,12 @@ fun TariffSettingsDialog(
         text = {
             Column {
                 Text(
-                    "Define el valor cobrado por bloque de tiempo:",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF334155)
+                    "Tarifa por bloque de parqueo:",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0F172A)
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = amountText,
                     onValueChange = {
@@ -247,8 +281,145 @@ fun TariffSettingsDialog(
                         .fillMaxWidth()
                         .testTag("tariff_minutes_input")
                 )
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Notificaciones de Saldo:",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0F172A)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Notifications,
+                            contentDescription = null,
+                            tint = SlateBlue,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (notifyEnabled) "Notificaciones Activadas" else "Notificaciones Desactivadas",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF334155)
+                        )
+                    }
+                    Switch(
+                        checked = notifyEnabled,
+                        onCheckedChange = { notifyEnabled = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = SlateBlue
+                        ),
+                        modifier = Modifier.testTag("toggle_notifications_switch")
+                    )
+                }
+
+                if (notifyEnabled) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = intervalText,
+                        onValueChange = {
+                            intervalText = it
+                            errorMessage = null
+                        },
+                        label = { Text("Frecuencia de notificación") },
+                        suffix = { Text("min") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("notification_interval_input")
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Ajustes Rápidos (Panel de Notificaciones):",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0F172A)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedButton(
+                    onClick = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            try {
+                                val statusBarManager = context.getSystemService(android.content.Context.STATUS_BAR_SERVICE) as? android.app.StatusBarManager
+                                val componentName = android.content.ComponentName(context, com.example.service.ParkiaTileService::class.java)
+                                statusBarManager?.requestAddTileService(
+                                    componentName,
+                                    "Abrir Parkia",
+                                    android.graphics.drawable.Icon.createWithResource(context, com.example.R.drawable.ic_car),
+                                    androidx.core.content.ContextCompat.getMainExecutor(context)
+                                ) { _ -> }
+                            } catch (_: Exception) {}
+                        }
+                        showQuickTileInstructions = true
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, SlateBlue),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("add_quick_tile_button")
+                ) {
+                    Icon(
+                        Icons.Default.DirectionsCar,
+                        contentDescription = null,
+                        tint = SlateBlue,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Agregar Acceso Rápido al Panel",
+                        color = SlateBlue,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Seguridad y PIN de Acceso:",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0F172A)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedButton(
+                    onClick = { showChangePinModal = true },
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, SlateBlue),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("change_pin_button")
+                ) {
+                    Icon(
+                        Icons.Default.Pin,
+                        contentDescription = null,
+                        tint = SlateBlue,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Cambiar PIN de la App",
+                        color = SlateBlue,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
+
                 errorMessage?.let {
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(it, color = ErrorRed, style = MaterialTheme.typography.bodySmall)
                 }
             }
@@ -258,16 +429,19 @@ fun TariffSettingsDialog(
                 onClick = {
                     val amount = amountText.replace(',', '.').toDoubleOrNull()
                     val minutes = minutesText.toIntOrNull()
+                    val interval = intervalText.toIntOrNull()
                     if (amount == null || amount <= 0.0 || minutes == null || minutes <= 0) {
-                        errorMessage = "Ingresa valores numéricos válidos mayores a 0."
+                        errorMessage = "Ingresa valores numéricos válidos para la tarifa."
+                    } else if (notifyEnabled && (interval == null || interval <= 0)) {
+                        errorMessage = "Ingresa un intervalo de notificación válido mayor a 0 min."
                     } else {
-                        onConfirm(amount, minutes)
+                        onConfirm(amount, minutes, notifyEnabled, interval ?: 1)
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = SlateBlue),
                 modifier = Modifier.testTag("confirm_tariff_settings_button")
             ) {
-                Text("Guardar Tarifa", color = Color.White)
+                Text("Guardar Ajustes", color = Color.White)
             }
         },
         dismissButton = {
@@ -451,7 +625,6 @@ fun NoFundsAlertDialog(
 /**
  * Dialog to modify the active parking session entry date/time AND initial entry balance.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EditActiveSessionDialog(
     currentStartTimestamp: Long,
@@ -459,14 +632,47 @@ fun EditActiveSessionDialog(
     onDismiss: () -> Unit,
     onConfirm: (newTimestamp: Long, newInitialBalance: Double) -> Unit
 ) {
+    val context = LocalContext.current
     val fullFormat = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault())
-    var dateTimeText by remember {
-        mutableStateOf(fullFormat.format(Date(currentStartTimestamp)))
-    }
+
+    var selectedTimestamp by remember { mutableStateOf(currentStartTimestamp) }
     var initialBalanceText by remember {
         mutableStateOf(String.format(Locale.US, "%.2f", currentInitialBalance))
     }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    fun openDateTimePicker() {
+        val cal = Calendar.getInstance()
+        cal.timeInMillis = selectedTimestamp
+
+        val datePicker = android.app.DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                cal.set(Calendar.YEAR, year)
+                cal.set(Calendar.MONTH, month)
+                cal.set(Calendar.DAY_OF_MONTH, dayOfMonth)
+
+                val timePicker = android.app.TimePickerDialog(
+                    context,
+                    { _, hourOfDay, minute ->
+                        cal.set(Calendar.HOUR_OF_DAY, hourOfDay)
+                        cal.set(Calendar.MINUTE, minute)
+                        cal.set(Calendar.SECOND, 0)
+                        selectedTimestamp = cal.timeInMillis
+                        errorMessage = null
+                    },
+                    cal.get(Calendar.HOUR_OF_DAY),
+                    cal.get(Calendar.MINUTE),
+                    true
+                )
+                timePicker.show()
+            },
+            cal.get(Calendar.YEAR),
+            cal.get(Calendar.MONTH),
+            cal.get(Calendar.DAY_OF_MONTH)
+        )
+        datePicker.show()
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -489,7 +695,7 @@ fun EditActiveSessionDialog(
         text = {
             Column {
                 Text(
-                    "Modifica la fecha y hora de entrada y el saldo inicial con el que inició la sesión. El costo de bloques y saldo restante se recalcularán automáticamente.",
+                    "Modifica el saldo inicial y selecciona la fecha y hora de entrada de la sesión activa:",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFF334155)
                 )
@@ -511,68 +717,44 @@ fun EditActiveSessionDialog(
                         .testTag("edit_initial_balance_input")
                 )
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                // Date/time input
-                OutlinedTextField(
-                    value = dateTimeText,
-                    onValueChange = {
-                        dateTimeText = it
-                        errorMessage = null
-                    },
-                    label = { Text("Fecha y Hora de Entrada") },
-                    singleLine = true,
-                    isError = errorMessage != null,
-                    supportingText = {
-                        errorMessage?.let {
-                            Text(it, color = ErrorRed)
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("edit_entry_datetime_input")
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
+                // Date & Time picker graphic button
                 Text(
-                    text = "Ajustes rápidos de entrada:",
+                    text = "Fecha y Hora de Entrada (Selección gráfica):",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF64748B)
                 )
                 Spacer(modifier = Modifier.height(6.dp))
 
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                OutlinedButton(
+                    onClick = { openDateTimePicker() },
+                    border = BorderStroke(1.dp, SlateBlue),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("open_datetime_picker_button")
                 ) {
-                    val presets = listOf(
-                        "Hace 15m" to (15 * 60L * 1000L),
-                        "Hace 30m" to (30 * 60L * 1000L),
-                        "Hace 1h" to (60 * 60L * 1000L),
-                        "Hace 2h" to (120 * 60L * 1000L),
-                        "Ahora mismo" to 0L
+                    Icon(
+                        Icons.Default.Event,
+                        contentDescription = "Seleccionar fecha y hora",
+                        tint = SlateBlue,
+                        modifier = Modifier.size(20.dp)
                     )
-                    presets.forEach { (label, offsetMs) ->
-                        OutlinedButton(
-                            onClick = {
-                                val newTime = System.currentTimeMillis() - offsetMs
-                                dateTimeText = fullFormat.format(Date(newTime))
-                                errorMessage = null
-                            },
-                            shape = RoundedCornerShape(8.dp),
-                            border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
-                            modifier = Modifier.testTag("preset_${label.replace(" ", "_")}_button")
-                        ) {
-                            Text(
-                                text = label,
-                                fontSize = 11.sp,
-                                color = SlateBlue,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = fullFormat.format(Date(selectedTimestamp)),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = Color(0xFF0F172A)
+                    )
+                }
+
+                errorMessage?.let {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(it, color = ErrorRed, style = MaterialTheme.typography.bodySmall)
                 }
             }
         },
@@ -584,22 +766,12 @@ fun EditActiveSessionDialog(
                         errorMessage = "Ingresa un saldo inicial válido."
                         return@Button
                     }
-
-                    try {
-                        val parsed = fullFormat.parse(dateTimeText)
-                        if (parsed == null) {
-                            errorMessage = "Formato de fecha inválido. Usa dd/MM/yyyy HH:mm:ss"
-                        } else {
-                            val now = System.currentTimeMillis()
-                            if (parsed.time > now) {
-                                errorMessage = "La hora de entrada no puede ser en el futuro."
-                            } else {
-                                onConfirm(parsed.time, balanceVal)
-                            }
-                        }
-                    } catch (e: Exception) {
-                        errorMessage = "Error al interpretar la fecha. Usa dd/MM/yyyy HH:mm:ss"
+                    val now = System.currentTimeMillis()
+                    if (selectedTimestamp > now) {
+                        errorMessage = "La hora de entrada no puede ser en el futuro."
+                        return@Button
                     }
+                    onConfirm(selectedTimestamp, balanceVal)
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = SlateBlue),
                 modifier = Modifier.testTag("confirm_edit_entry_time_button")
@@ -770,6 +942,508 @@ fun ConfirmStopSessionDialog(
                 modifier = Modifier.testTag("cancel_stop_session_dialog_button")
             ) {
                 Text("Continuar Parqueando", color = Color(0xFF475569))
+            }
+        }
+    )
+}
+
+@Composable
+fun PinAuthenticationDialog(
+    onDismiss: () -> Unit,
+    onSuccess: () -> Unit
+) {
+    val context = LocalContext.current
+    var enteredPin by remember { mutableStateOf("") }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        icon = {
+            Icon(
+                Icons.Default.Lock,
+                contentDescription = "Autenticación PIN",
+                tint = SlateBlue
+            )
+        },
+        title = {
+            Text(
+                "Autenticación de Seguridad",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF0F172A),
+                textAlign = TextAlign.Center
+            )
+        },
+        text = {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    "Ingresa tu PIN de 4 dígitos para autorizar esta acción:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF64748B),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // PIN Dots Display
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    for (i in 0 until 4) {
+                        val isFilled = i < enteredPin.length
+                        Box(
+                            modifier = Modifier
+                                .size(16.dp)
+                                .background(
+                                    if (isFilled) SlateBlue else Color(0xFFE2E8F0),
+                                    shape = CircleShape
+                                )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (errorMessage != null) {
+                    Text(
+                        text = errorMessage ?: "",
+                        color = ErrorRed,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center
+                    )
+                } else {
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Keypad
+                val onDigitClick: (String) -> Unit = { digit ->
+                    errorMessage = null
+                    if (enteredPin.length < 4) {
+                        val next = enteredPin + digit
+                        enteredPin = next
+                        if (next.length == 4) {
+                            if (SecurityManager.verifyPin(context, next)) {
+                                onSuccess()
+                            } else {
+                                errorMessage = "PIN incorrecto. Intenta de nuevo."
+                                enteredPin = ""
+                            }
+                        }
+                    }
+                }
+
+                val onBackspaceClick: () -> Unit = {
+                    errorMessage = null
+                    if (enteredPin.isNotEmpty()) {
+                        enteredPin = enteredPin.dropLast(1)
+                    }
+                }
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    val rows = listOf(
+                        listOf("1", "2", "3"),
+                        listOf("4", "5", "6"),
+                        listOf("7", "8", "9")
+                    )
+
+                    rows.forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            row.forEach { digit ->
+                                KeypadDialogButton(text = digit, onClick = { onDigitClick(digit) })
+                            }
+                        }
+                    }
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(modifier = Modifier.size(56.dp))
+                        KeypadDialogButton(text = "0", onClick = { onDigitClick("0") })
+                        Surface(
+                            onClick = onBackspaceClick,
+                            shape = CircleShape,
+                            color = Color(0xFFF1F5F9),
+                            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                            modifier = Modifier.size(56.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.Backspace,
+                                    contentDescription = "Borrar",
+                                    modifier = Modifier.size(20.dp),
+                                    tint = Color(0xFF475569)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            OutlinedButton(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Cancelar", color = Color(0xFF475569))
+            }
+        }
+    )
+}
+
+@Composable
+fun ChangePinDialog(
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val hasExistingPin = remember { SecurityManager.isPinConfigured(context) }
+
+    // Step 0 = enter current pin, 1 = enter new pin, 2 = confirm new pin
+    var step by remember { mutableStateOf(if (hasExistingPin) 0 else 1) }
+    var currentPin by remember { mutableStateOf("") }
+    var newPin by remember { mutableStateOf("") }
+    var confirmPin by remember { mutableStateOf("") }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var successMessage by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        icon = {
+            Icon(
+                Icons.Default.Pin,
+                contentDescription = "Cambiar PIN",
+                tint = SlateBlue
+            )
+        },
+        title = {
+            Text(
+                "Cambiar PIN de la App",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF0F172A),
+                textAlign = TextAlign.Center
+            )
+        },
+        text = {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                val instructionText = when (step) {
+                    0 -> "Ingresa tu PIN actual:"
+                    1 -> "Ingresa tu NUEVO PIN de 4 dígitos:"
+                    else -> "Confirma tu NUEVO PIN de 4 dígitos:"
+                }
+
+                Text(
+                    text = instructionText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF64748B),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                val activePin = when (step) {
+                    0 -> currentPin
+                    1 -> newPin
+                    else -> confirmPin
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    for (i in 0 until 4) {
+                        val isFilled = i < activePin.length
+                        Box(
+                            modifier = Modifier
+                                .size(16.dp)
+                                .background(
+                                    if (isFilled) SlateBlue else Color(0xFFE2E8F0),
+                                    shape = CircleShape
+                                )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (errorMessage != null) {
+                    Text(
+                        text = errorMessage ?: "",
+                        color = ErrorRed,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center
+                    )
+                } else if (successMessage != null) {
+                    Text(
+                        text = successMessage ?: "",
+                        color = Color(0xFF16A34A),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+                } else {
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Keypad
+                val onDigitClick: (String) -> Unit = { digit ->
+                    errorMessage = null
+                    when (step) {
+                        0 -> {
+                            if (currentPin.length < 4) {
+                                val next = currentPin + digit
+                                currentPin = next
+                                if (next.length == 4) {
+                                    if (SecurityManager.verifyPin(context, next)) {
+                                        step = 1
+                                    } else {
+                                        errorMessage = "PIN actual incorrecto. Intenta de nuevo."
+                                        currentPin = ""
+                                    }
+                                }
+                            }
+                        }
+                        1 -> {
+                            if (newPin.length < 4) {
+                                val next = newPin + digit
+                                newPin = next
+                                if (next.length == 4) {
+                                    step = 2
+                                }
+                            }
+                        }
+                        2 -> {
+                            if (confirmPin.length < 4) {
+                                val next = confirmPin + digit
+                                confirmPin = next
+                                if (next.length == 4) {
+                                    if (next == newPin) {
+                                        SecurityManager.savePin(context, newPin)
+                                        successMessage = "¡PIN actualizado correctamente!"
+                                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                            onDismiss()
+                                        }, 1200)
+                                    } else {
+                                        errorMessage = "Los PINs no coinciden. Intenta de nuevo."
+                                        confirmPin = ""
+                                        newPin = ""
+                                        step = 1
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                val onBackspaceClick: () -> Unit = {
+                    errorMessage = null
+                    when (step) {
+                        0 -> if (currentPin.isNotEmpty()) currentPin = currentPin.dropLast(1)
+                        1 -> if (newPin.isNotEmpty()) newPin = newPin.dropLast(1)
+                        2 -> {
+                            if (confirmPin.isNotEmpty()) {
+                                confirmPin = confirmPin.dropLast(1)
+                            } else {
+                                step = 1
+                                newPin = ""
+                            }
+                        }
+                    }
+                }
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    val rows = listOf(
+                        listOf("1", "2", "3"),
+                        listOf("4", "5", "6"),
+                        listOf("7", "8", "9")
+                    )
+
+                    rows.forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            row.forEach { digit ->
+                                KeypadDialogButton(text = digit, onClick = { onDigitClick(digit) })
+                            }
+                        }
+                    }
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(modifier = Modifier.size(56.dp))
+                        KeypadDialogButton(text = "0", onClick = { onDigitClick("0") })
+                        Surface(
+                            onClick = onBackspaceClick,
+                            shape = CircleShape,
+                            color = Color(0xFFF1F5F9),
+                            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                            modifier = Modifier.size(56.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.Backspace,
+                                    contentDescription = "Borrar",
+                                    modifier = Modifier.size(20.dp),
+                                    tint = Color(0xFF475569)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            OutlinedButton(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Cancelar", color = Color(0xFF475569))
+            }
+        }
+    )
+}
+
+@Composable
+private fun KeypadDialogButton(
+    text: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = Color(0xFFF8FAFC),
+        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+        modifier = Modifier.size(56.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = text,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF0F172A)
+            )
+        }
+    }
+}
+
+@Composable
+fun QuickTileInstructionsDialog(
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        icon = {
+            Icon(
+                Icons.Default.DirectionsCar,
+                contentDescription = "Acceso Rápido",
+                tint = SlateBlue
+            )
+        },
+        title = {
+            Text(
+                "Ajustes Rápidos (Panel de Notificaciones)",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF0F172A),
+                textAlign = TextAlign.Center
+            )
+        },
+        text = {
+            Column {
+                Text(
+                    "Puedes agregar el acceso rápido 'Abrir Parkia' al panel superior de tu teléfono:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF334155)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFFF8FAFC),
+                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "1. Desliza la barra de estado hacia abajo para abrir los Ajustes Rápidos.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF0F172A),
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "2. Presiona el botón del lápiz ✏️ o 'Editar'.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF0F172A),
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "3. Busca el azulejo 'Abrir Parkia' 🚗 y arrástralo a tus accesos principales.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SlateBlue,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        try {
+                            val statusBarManager = context.getSystemService(android.content.Context.STATUS_BAR_SERVICE) as? android.app.StatusBarManager
+                            val componentName = android.content.ComponentName(context, com.example.service.ParkiaTileService::class.java)
+                            statusBarManager?.requestAddTileService(
+                                componentName,
+                                "Abrir Parkia",
+                                android.graphics.drawable.Icon.createWithResource(context, com.example.R.drawable.ic_car),
+                                androidx.core.content.ContextCompat.getMainExecutor(context)
+                            ) { _ -> }
+                        } catch (_: Exception) {}
+                    }
+                    onDismiss()
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = SlateBlue),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) "Agregar al Panel de Notificaciones" else "Entendido",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Cerrar", color = Color(0xFF475569))
             }
         }
     )

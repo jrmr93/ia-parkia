@@ -15,7 +15,9 @@ data class ParkingConfig(
     val sessionInitialBalance: Double = 0.0, // Saldo al momento de iniciar la sesión
     val lastProcessedTimestamp: Long = 0L,
     val elapsedSeconds: Long = 0L,
-    val accumulatedCost: Double = 0.0
+    val accumulatedCost: Double = 0.0,
+    val notificationsEnabled: Boolean = true,
+    val notificationIntervalMinutes: Int = 1
 )
 
 @Entity(tableName = "parking_history")

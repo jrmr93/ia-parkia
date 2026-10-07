@@ -1,8 +1,6 @@
 package com.example.ui
 
 import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -19,10 +17,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -36,11 +35,13 @@ import com.example.ui.components.HistoryCard
 import com.example.ui.components.NoFundsAlertDialog
 import com.example.ui.components.ParkingBayCard
 import com.example.ui.components.ParkingTopBar
+import com.example.ui.components.PinAuthenticationDialog
 import com.example.ui.components.RechargeCustomDialog
 import com.example.ui.components.ResetAllDialog
 import com.example.ui.components.ResetBalanceDialog
 import com.example.ui.components.TariffSettingsDialog
 import com.example.ui.components.WalletCard
+import com.example.util.SecurityManager
 
 @Composable
 fun ParkingMainScreen(
@@ -48,33 +49,32 @@ fun ParkingMainScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
+    val context = LocalContext.current
+    val activity = context as? FragmentActivity
 
     // Request notification permission on Android 13+ only if not granted
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        val context = androidx.compose.ui.platform.LocalContext.current
-        val activity = context as? androidx.fragment.app.FragmentActivity
         val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
             context,
             android.Manifest.permission.POST_NOTIFICATIONS
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
-        var hasCheckedPermission by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(hasPermission) }
+        var hasCheckedPermission by remember { mutableStateOf(hasPermission) }
 
         if (!hasCheckedPermission && activity != null) {
             LaunchedEffect(Unit) {
                 hasCheckedPermission = true
-                com.example.util.SecurityManager.isRequestingPermission = true
+                SecurityManager.isRequestingPermission = true
                 androidx.core.app.ActivityCompat.requestPermissions(
                     activity,
                     arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
                     1001
                 )
                 kotlinx.coroutines.delay(1000)
-                com.example.util.SecurityManager.isRequestingPermission = false
+                SecurityManager.isRequestingPermission = false
             }
         }
     }
-
 
     // Register lifecycle observer to trigger catch-up on ON_RESUME
     DisposableEffect(lifecycleOwner) {
@@ -86,6 +86,34 @@ fun ParkingMainScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    var showPinAuthDialog by remember { mutableStateOf(false) }
+    var pendingAuthenticatedAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    // Helper for authenticating via PIN/Biometrics before performing sensitive reset actions
+    fun authenticateBeforeAction(onSuccess: () -> Unit) {
+        if (activity != null && SecurityManager.isPinConfigured(context)) {
+            if (SecurityManager.canAuthenticateBiometrics(context)) {
+                SecurityManager.launchBiometricPrompt(
+                    activity = activity,
+                    onSuccess = onSuccess,
+                    onPinRequired = {
+                        pendingAuthenticatedAction = onSuccess
+                        showPinAuthDialog = true
+                    },
+                    onError = {
+                        pendingAuthenticatedAction = onSuccess
+                        showPinAuthDialog = true
+                    }
+                )
+            } else {
+                pendingAuthenticatedAction = onSuccess
+                showPinAuthDialog = true
+            }
+        } else {
+            onSuccess()
         }
     }
 
@@ -112,7 +140,7 @@ fun ParkingMainScreen(
                     .widthIn(max = 640.dp),
                 contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)
             ) {
-                // Digital Wallet Card (includes estimated exhaustion when session is active)
+                // Digital Wallet Card (Panel 1: keyboard recharge only & authenticated balance reset)
                 item {
                     WalletCard(
                         balance = uiState.config.balance,
@@ -120,13 +148,16 @@ fun ParkingMainScreen(
                         isLowBalance = uiState.isLowBalance,
                         estimatedExhaustion = uiState.estimatedExhaustionFormatted,
                         isSessionActive = uiState.config.isSessionActive,
-                        onQuickRecharge = { viewModel.rechargeBalance(it) },
                         onOpenCustomRecharge = { viewModel.setShowRechargeCustomDialog(true) },
-                        onOpenResetBalance = { viewModel.setShowResetBalanceDialog(true) }
+                        onOpenResetBalance = {
+                            authenticateBeforeAction {
+                                viewModel.setShowResetBalanceDialog(true)
+                            }
+                        }
                     )
                 }
 
-                // Parking Bay and Session Control Card (includes Modify button for active session)
+                // Parking Bay and Session Control Card (Panel 2: active session & full-text Modify button)
                 item {
                     ParkingBayCard(
                         isSessionActive = uiState.config.isSessionActive,
@@ -142,7 +173,7 @@ fun ParkingMainScreen(
                     )
                 }
 
-                // History Card (contains active session row and Resetear button)
+                // History Card (Panel 3: active session row and authenticated Resetear todo button)
                 item {
                     HistoryCard(
                         historyList = uiState.history,
@@ -153,7 +184,11 @@ fun ParkingMainScreen(
                         accumulatedCost = uiState.config.accumulatedCost,
                         totalSpentHistorical = uiState.totalSpentHistorical,
                         totalSessionsCount = uiState.totalSessionsCount,
-                        onResetAllClick = { viewModel.setShowResetAllDialog(true) }
+                        onResetAllClick = {
+                            authenticateBeforeAction {
+                                viewModel.setShowResetAllDialog(true)
+                            }
+                        }
                     )
                 }
 
@@ -211,9 +246,11 @@ fun ParkingMainScreen(
         TariffSettingsDialog(
             currentAmount = uiState.config.rateAmount,
             currentMinutes = uiState.config.rateMinutes,
+            notificationsEnabled = uiState.config.notificationsEnabled,
+            notificationIntervalMinutes = uiState.config.notificationIntervalMinutes,
             onDismiss = { viewModel.setShowTariffSettingsDialog(false) },
-            onConfirm = { amount, minutes ->
-                viewModel.updateTariff(amount, minutes)
+            onConfirm = { amount, minutes, notifyEnabled, notifyInterval ->
+                viewModel.updateTariffAndNotifications(amount, minutes, notifyEnabled, notifyInterval)
                 viewModel.setShowTariffSettingsDialog(false)
             }
         )
@@ -252,6 +289,21 @@ fun ParkingMainScreen(
         NoFundsAlertDialog(
             onDismiss = { viewModel.dismissNoFundsAlert() },
             onRechargeClick = { viewModel.setShowRechargeCustomDialog(true) }
+        )
+    }
+
+    if (showPinAuthDialog) {
+        PinAuthenticationDialog(
+            onDismiss = {
+                showPinAuthDialog = false
+                pendingAuthenticatedAction = null
+            },
+            onSuccess = {
+                val action = pendingAuthenticatedAction
+                showPinAuthDialog = false
+                pendingAuthenticatedAction = null
+                action?.invoke()
+            }
         )
     }
 }

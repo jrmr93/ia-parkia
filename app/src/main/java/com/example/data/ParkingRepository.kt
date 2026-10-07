@@ -372,4 +372,14 @@ class ParkingRepository(private val dao: ParkingDao) {
             )
         )
     }
+
+    suspend fun updateNotificationSettings(enabled: Boolean, intervalMinutes: Int) = withContext(Dispatchers.IO) {
+        val config = getOrCreateConfig()
+        dao.saveConfig(
+            config.copy(
+                notificationsEnabled = enabled,
+                notificationIntervalMinutes = max(1, intervalMinutes)
+            )
+        )
+    }
 }

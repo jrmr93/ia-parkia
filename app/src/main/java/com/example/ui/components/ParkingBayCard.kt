@@ -330,7 +330,9 @@ fun ParkingBayCard(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column {
+                                Column(
+                                    modifier = Modifier.weight(1f).padding(end = 8.dp)
+                                ) {
                                     Text(
                                         text = "Entrada: ${timeFormat.format(Date(sessionStartTimestamp))}",
                                         style = MaterialTheme.typography.bodySmall,
@@ -340,18 +342,21 @@ fun ParkingBayCard(
                                         fontSize = 11.sp
                                     )
                                     Text(
-                                        text = "Saldo con el que entró: $${String.format(Locale.US, "%.2f", sessionInitialBalance)} USD",
+                                        text = "Saldo inicial: $${String.format(Locale.US, "%.2f", sessionInitialBalance)} USD",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = Color(0xFF64748B),
                                         fontSize = 10.sp
                                     )
                                 }
 
-                                // REQUIRED: Botón de modificar en el panel de sesión activa
                                 OutlinedButton(
                                     onClick = onEditActiveSessionClick,
                                     border = BorderStroke(1.dp, SlateBlue),
                                     shape = RoundedCornerShape(8.dp),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                        horizontal = 12.dp,
+                                        vertical = 6.dp
+                                    ),
                                     modifier = Modifier.testTag("edit_active_session_bay_button")
                                 ) {
                                     Icon(
@@ -365,7 +370,9 @@ fun ParkingBayCard(
                                         text = "Modificar",
                                         fontSize = 12.sp,
                                         color = SlateBlue,
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        softWrap = false
                                     )
                                 }
                             }

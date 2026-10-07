@@ -42,6 +42,7 @@ object SecurityManager {
     fun launchBiometricPrompt(
         activity: FragmentActivity,
         onSuccess: () -> Unit,
+        onPinRequired: (() -> Unit)? = null,
         onError: (String) -> Unit
     ) {
         if (activity.supportFragmentManager.isStateSaved ||
@@ -64,11 +65,16 @@ object SecurityManager {
                     }, 250)
                 }
 
-
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                     super.onAuthenticationError(errorCode, errString)
                     isAuthenticating = false
-                    if (errorCode != BiometricPrompt.ERROR_USER_CANCELED && errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
+                    if (errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON || errorCode == BiometricPrompt.ERROR_USER_CANCELED) {
+                        if (onPinRequired != null) {
+                            onPinRequired()
+                        } else {
+                            onError("Ingresa tu PIN de la app para continuar.")
+                        }
+                    } else {
                         onError(errString.toString())
                     }
                 }
@@ -92,7 +98,11 @@ object SecurityManager {
             biometricPrompt.authenticate(promptInfo)
         } catch (ex: Exception) {
             isAuthenticating = false
-            onError("Ingresa tu PIN de 4 dígitos para acceder.")
+            if (onPinRequired != null) {
+                onPinRequired()
+            } else {
+                onError("Ingresa tu PIN de 4 dígitos para acceder.")
+            }
         }
     }
 }

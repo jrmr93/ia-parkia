@@ -7,8 +7,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,7 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddCard
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.HourglassBottom
@@ -50,7 +48,6 @@ import com.example.ui.theme.SlateBlue
 import com.example.ui.theme.SuccessEmerald
 import com.example.ui.theme.WarningAmber
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun WalletCard(
     balance: Double,
@@ -58,7 +55,6 @@ fun WalletCard(
     isLowBalance: Boolean,
     estimatedExhaustion: String?,
     isSessionActive: Boolean,
-    onQuickRecharge: (Double) -> Unit,
     onOpenCustomRecharge: () -> Unit,
     onOpenResetBalance: () -> Unit
 ) {
@@ -121,7 +117,7 @@ fun WalletCard(
                     }
                 }
 
-                // Reset balance button
+                // Reset balance button (Reiniciar)
                 OutlinedButton(
                     onClick = onOpenResetBalance,
                     colors = ButtonDefaults.outlinedButtonColors(
@@ -228,7 +224,7 @@ fun WalletCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Time Equivalence Banner (Always auto-calculated)
+            // Time Equivalence Banner
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = Color(0xFFF8FAFC),
@@ -265,8 +261,7 @@ fun WalletCard(
                 }
             }
 
-            // REQUIRED: Estimated exhaustion date and time in Digital Wallet panel
-            // Displayed ONLY when parking session is active
+            // Estimated exhaustion date/time (when session is active)
             AnimatedVisibility(
                 visible = isSessionActive && estimatedExhaustion != null,
                 enter = fadeIn(),
@@ -276,7 +271,7 @@ fun WalletCard(
                     Spacer(modifier = Modifier.height(10.dp))
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = Color(0xFFFEF3C7), // Warm Amber Light
+                        color = Color(0xFFFEF3C7),
                         border = BorderStroke(1.dp, WarningAmber.copy(alpha = 0.6f)),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -315,11 +310,11 @@ fun WalletCard(
                 }
             }
 
-            // Warning note if low or exhausted
+            // Warning notes if low or exhausted
             if (isExhausted) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "⚠️ Tu saldo es $0.00 USD. Recarga saldo para poder estacionar.",
+                    text = "⚠️ Tu saldo es $0.00 USD. Ingresa el valor a recargar por teclado.",
                     style = MaterialTheme.typography.bodySmall,
                     color = ErrorRed,
                     fontSize = 12.sp
@@ -336,60 +331,32 @@ fun WalletCard(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Quick Recharge Buttons
-            Text(
-                text = "Recarga Rápida de Saldo:",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = Color(0xFF0F172A)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            // Single Keyboard/Custom Recharge Button (No quick recharge buttons)
+            Button(
+                onClick = onOpenCustomRecharge,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = SlateBlue,
+                    contentColor = Color.White
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .testTag("custom_recharge_button")
             ) {
-                val quickAmounts = listOf(1.0, 2.0, 5.0, 10.0, 20.0)
-                quickAmounts.forEach { amount ->
-                    Button(
-                        onClick = { onQuickRecharge(amount) },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = SlateBlue,
-                            contentColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.testTag("quick_recharge_${amount.toInt()}_button")
-                    ) {
-                        Text(
-                            text = "+$${amount.toInt()}",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
-                        )
-                    }
-                }
-
-                // Custom amount button
-                OutlinedButton(
-                    onClick = onOpenCustomRecharge,
-                    border = BorderStroke(1.dp, SlateBlue),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.testTag("custom_recharge_button")
-                ) {
-                    Icon(
-                        Icons.Default.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = SlateBlue
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Otro monto...",
-                        color = SlateBlue,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
-                    )
-                }
+                Icon(
+                    Icons.Default.AddCard,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = Color.White
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Recargar Saldo (Ingresar valor)",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
             }
         }
     }
