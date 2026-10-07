@@ -24,3 +24,4 @@ local.properties
 captures/
 *.hprof
 *.heapdump
+.env.example

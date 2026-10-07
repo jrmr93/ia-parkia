@@ -331,6 +331,17 @@ class ParkingRepository(private val dao: ParkingDao) {
         )
     }
 
+    suspend fun setBalance(amount: Double) = withContext(Dispatchers.IO) {
+        val config = getOrCreateConfig()
+        val validBalance = amount.coerceAtLeast(0.0)
+        dao.saveConfig(
+            config.copy(
+                balance = validBalance,
+                sessionInitialBalance = validBalance
+            )
+        )
+    }
+
     suspend fun resetBalance() = withContext(Dispatchers.IO) {
         val config = getOrCreateConfig()
         if (config.isSessionActive) {
@@ -389,6 +400,30 @@ class ParkingRepository(private val dao: ParkingDao) {
         dao.saveConfig(
             config.copy(
                 tileLabel = cleanLabel
+            )
+        )
+    }
+
+    suspend fun updateTariffAndNotifications(
+        amount: Double,
+        minutes: Int,
+        notifyEnabled: Boolean,
+        notifyInterval: Int,
+        tileLabel: String,
+        geminiApiKey: String,
+        geminiModel: String
+    ) = withContext(Dispatchers.IO) {
+        val config = getOrCreateConfig()
+        val cleanLabel = if (tileLabel.isBlank()) "Parkia" else tileLabel.trim()
+        dao.saveConfig(
+            config.copy(
+                rateAmount = amount,
+                rateMinutes = max(1, minutes),
+                notificationsEnabled = notifyEnabled,
+                notificationIntervalMinutes = max(1, notifyInterval),
+                tileLabel = cleanLabel,
+                customGeminiApiKey = geminiApiKey.trim(),
+                customGeminiModel = if (geminiModel.isBlank()) "gemini-2.0-flash" else geminiModel.trim()
             )
         )
     }

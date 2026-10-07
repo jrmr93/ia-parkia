@@ -42,6 +42,9 @@ import com.example.ui.components.ResetBalanceDialog
 import com.example.ui.components.TariffSettingsDialog
 import com.example.ui.components.WalletCard
 import com.example.util.SecurityManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun ParkingMainScreen(
@@ -249,9 +252,22 @@ fun ParkingMainScreen(
             notificationsEnabled = uiState.config.notificationsEnabled,
             notificationIntervalMinutes = uiState.config.notificationIntervalMinutes,
             currentTileLabel = uiState.config.tileLabel,
+            currentGeminiApiKey = uiState.config.customGeminiApiKey,
+            currentGeminiModel = uiState.config.customGeminiModel,
+            onTestGeminiKey = { apiKey, modelName, onResult ->
+                viewModel.testGeminiApiKey(apiKey, modelName, onResult)
+            },
             onDismiss = { viewModel.setShowTariffSettingsDialog(false) },
-            onConfirm = { amount, minutes, notifyEnabled, notifyInterval, tileLabel ->
-                viewModel.updateTariffAndNotifications(amount, minutes, notifyEnabled, notifyInterval, tileLabel)
+            onConfirm = { amount, minutes, notifyEnabled, notifyInterval, tileLabel, apiKey, modelName ->
+                viewModel.updateTariffAndNotifications(
+                    amount = amount,
+                    minutes = minutes,
+                    notifyEnabled = notifyEnabled,
+                    notifyInterval = notifyInterval,
+                    tileLabel = tileLabel,
+                    geminiApiKey = apiKey,
+                    geminiModel = modelName
+                )
                 viewModel.setShowTariffSettingsDialog(false)
             }
         )
@@ -267,14 +283,201 @@ fun ParkingMainScreen(
         )
     }
 
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+
+    var tempPhotoUri by remember { mutableStateOf<android.net.Uri?>(null) }
+
+    fun createTempImageUri(): android.net.Uri {
+        val file = java.io.File(context.cacheDir, "parkia_camera_photo.jpg")
+        return androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+    }
+
+    val speechLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        SecurityManager.isRequestingPermission = false
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val spokenText = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull() ?: ""
+            if (spokenText.isNotBlank()) {
+                viewModel.processVoiceAi(spokenText)
+            }
+        }
+    }
+
+    fun decodeAndScaleBitmap(uri: android.net.Uri, maxDimension: Int = 1024): android.graphics.Bitmap? {
+        return try {
+            val options = android.graphics.BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                android.graphics.BitmapFactory.decodeStream(stream, null, options)
+            }
+
+            var sampleSize = 1
+            while (options.outWidth / sampleSize > maxDimension || options.outHeight / sampleSize > maxDimension) {
+                sampleSize *= 2
+            }
+
+            val scaleOptions = android.graphics.BitmapFactory.Options().apply {
+                inSampleSize = sampleSize
+                inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
+            }
+
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                android.graphics.BitmapFactory.decodeStream(stream, null, scaleOptions)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    val cameraLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.TakePicture()
+    ) { success ->
+        SecurityManager.isRequestingPermission = false
+        if (success && tempPhotoUri != null) {
+            val bitmap = decodeAndScaleBitmap(tempPhotoUri!!)
+            if (bitmap != null) {
+                viewModel.processVisionAi(bitmap)
+            }
+        }
+    }
+
+    fun launchCameraIntent() {
+        SecurityManager.isRequestingPermission = true
+        try {
+            val uri = createTempImageUri()
+            tempPhotoUri = uri
+            cameraLauncher.launch(uri)
+        } catch (e: Exception) {
+            SecurityManager.isRequestingPermission = false
+            android.widget.Toast.makeText(context, "No se pudo abrir la cámara.", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun launchSpeechIntent() {
+        SecurityManager.isRequestingPermission = true
+        val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, java.util.Locale.getDefault())
+            putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Di tu saldo inicial...")
+        }
+        try {
+            speechLauncher.launch(intent)
+        } catch (e: Exception) {
+            SecurityManager.isRequestingPermission = false
+            android.widget.Toast.makeText(context, "No se pudo abrir el dictado por voz.", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val audioPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        SecurityManager.isRequestingPermission = false
+        if (isGranted) {
+            launchSpeechIntent()
+        } else {
+            android.widget.Toast.makeText(context, "Se requiere permiso de micrófono.", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val cameraPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        SecurityManager.isRequestingPermission = false
+        if (isGranted) {
+            launchCameraIntent()
+        } else {
+            android.widget.Toast.makeText(context, "Se requiere permiso de cámara.", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
     if (uiState.showEditActiveSessionDialog) {
         EditActiveSessionDialog(
-            currentStartTimestamp = uiState.config.sessionStartTimestamp,
-            currentInitialBalance = uiState.config.sessionInitialBalance,
+            currentStartTimestamp = if (uiState.config.isSessionActive) uiState.config.sessionStartTimestamp else System.currentTimeMillis(),
+            currentInitialBalance = if (uiState.config.isSessionActive) uiState.config.sessionInitialBalance else uiState.config.balance,
             onDismiss = { viewModel.setShowEditActiveSessionDialog(false) },
             onConfirm = { newTimestamp, newInitialBalance ->
-                viewModel.updateActiveSession(newTimestamp, newInitialBalance)
+                if (uiState.config.isSessionActive) {
+                    viewModel.updateActiveSession(newTimestamp, newInitialBalance)
+                } else {
+                    viewModel.startCustomSession(newInitialBalance, newTimestamp)
+                }
                 viewModel.setShowEditActiveSessionDialog(false)
+            }
+        )
+    }
+
+    if (uiState.showQuickTileStartModal) {
+        com.example.ui.components.QuickTileStartModal(
+            onDismiss = { viewModel.setShowQuickTileStartModal(false) },
+            onTraditionalStart = {
+                viewModel.setShowQuickTileStartModal(false)
+                viewModel.startSession()
+            },
+            onCustomStart = {
+                viewModel.setShowQuickTileStartModal(false)
+                viewModel.setShowEditActiveSessionDialog(true)
+            },
+            onVoiceStart = {
+                viewModel.setShowQuickTileStartModal(false)
+                val hasAudio = androidx.core.content.ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.RECORD_AUDIO
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+                if (hasAudio) {
+                    launchSpeechIntent()
+                } else {
+                    SecurityManager.isRequestingPermission = true
+                    audioPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                }
+            },
+            onCameraStart = {
+                viewModel.setShowQuickTileStartModal(false)
+                val hasCamera = androidx.core.content.ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.CAMERA
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+                if (hasCamera) {
+                    launchCameraIntent()
+                } else {
+                    SecurityManager.isRequestingPermission = true
+                    cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+                }
+            }
+        )
+    }
+
+    if (uiState.showVoiceAiDialog && uiState.voiceAiResult != null) {
+        com.example.ui.components.VoiceAiResultDialog(
+            result = uiState.voiceAiResult!!,
+            onDismiss = { viewModel.setShowVoiceAiDialog(false) },
+            onConfirm = { balance, timestamp ->
+                viewModel.setShowVoiceAiDialog(false)
+                viewModel.startCustomSession(balance, timestamp)
+            }
+        )
+    }
+
+    if (uiState.showVisionAiDialog && uiState.visionAiResult != null) {
+        com.example.ui.components.VisionAiResultDialog(
+            bitmap = uiState.capturedBitmap,
+            result = uiState.visionAiResult!!,
+            onDismiss = { viewModel.setShowVisionAiDialog(false) },
+            onRetakePhoto = {
+                viewModel.setShowVisionAiDialog(false)
+                launchCameraIntent()
+            },
+            onConfirm = { balance, timestamp ->
+                viewModel.setShowVisionAiDialog(false)
+                viewModel.startCustomSession(balance, timestamp)
             }
         )
     }

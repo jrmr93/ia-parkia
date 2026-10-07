@@ -72,6 +72,22 @@ secrets {
 
 googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }
 
+configurations.all {
+  resolutionStrategy {
+    force("io.ktor:ktor-client-core:2.3.12")
+    force("io.ktor:ktor-client-okhttp:2.3.12")
+    force("io.ktor:ktor-client-android:2.3.12")
+    force("io.ktor:ktor-client-content-negotiation:2.3.12")
+    force("io.ktor:ktor-serialization-kotlinx-json:2.3.12")
+    force("io.ktor:ktor-client-logging:2.3.12")
+    force("io.ktor:ktor-http:2.3.12")
+    force("io.ktor:ktor-utils:2.3.12")
+    force("io.ktor:ktor-io:2.3.12")
+    force("io.ktor:ktor-events:2.3.12")
+    force("io.ktor:ktor-websockets:2.3.12")
+  }
+}
+
 // Some unused dependencies are commented out below instead of being removed.
 // This makes it easy to add them back in the future if needed.
 dependencies {
@@ -120,6 +136,15 @@ dependencies {
   implementation(libs.okhttp)
   // implementation(libs.play.services.location)
   implementation(libs.retrofit)
+  implementation("com.google.mlkit:text-recognition:16.0.1")
+  implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
+  val ktorVersion = "2.3.12"
+  implementation("io.ktor:ktor-client-android:$ktorVersion")
+  implementation("io.ktor:ktor-client-okhttp:$ktorVersion")
+  implementation("io.ktor:ktor-client-core:$ktorVersion")
+  implementation("io.ktor:ktor-client-cio:$ktorVersion")
+  implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
+  implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)
   testImplementation(libs.androidx.junit)

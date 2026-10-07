@@ -19,6 +19,7 @@ class MainActivity : FragmentActivity() {
 
   private val parkingViewModel: ParkingViewModel by viewModels()
   private var isUnlocked by mutableStateOf(false)
+  private var pendingTileAction by mutableStateOf(false)
   private var backgroundTimestamp = 0L
 
   companion object {
@@ -29,6 +30,8 @@ class MainActivity : FragmentActivity() {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
     NotificationHelper.createNotificationChannel(this)
+
+    checkTileIntent(intent)
 
     if (savedInstanceState != null) {
       isUnlocked = savedInstanceState.getBoolean("KEY_IS_UNLOCKED", false)
@@ -43,12 +46,41 @@ class MainActivity : FragmentActivity() {
             isInitialSetup = !isPinConfigured,
             onAuthenticated = {
               isUnlocked = true
+              if (pendingTileAction) {
+                pendingTileAction = false
+                handleTileAction()
+              }
             }
           )
         } else {
           ParkingMainScreen(viewModel = parkingViewModel)
         }
       }
+    }
+  }
+
+  override fun onNewIntent(intent: android.content.Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    checkTileIntent(intent)
+  }
+
+  private fun checkTileIntent(intent: android.content.Intent?) {
+    if (intent?.getBooleanExtra("EXTRA_FROM_QUICK_TILE", false) == true) {
+      intent.removeExtra("EXTRA_FROM_QUICK_TILE")
+      if (SecurityManager.isPinConfigured(this)) {
+        isUnlocked = false
+      }
+      pendingTileAction = true
+    }
+  }
+
+  private fun handleTileAction() {
+    val uiState = parkingViewModel.uiState.value
+    if (uiState.config.isSessionActive) {
+      parkingViewModel.stopSession()
+    } else {
+      parkingViewModel.setShowQuickTileStartModal(true)
     }
   }
 

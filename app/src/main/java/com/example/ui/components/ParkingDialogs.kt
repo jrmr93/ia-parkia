@@ -29,10 +29,23 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Pin
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -54,6 +67,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -206,19 +221,51 @@ fun TariffSettingsDialog(
     notificationsEnabled: Boolean,
     notificationIntervalMinutes: Int,
     currentTileLabel: String = "Parkia",
+    currentGeminiApiKey: String = "",
+    currentGeminiModel: String = "gemini-2.0-flash",
+    onTestGeminiKey: ((apiKey: String, modelName: String, onResult: (Boolean, String) -> Unit) -> Unit)? = null,
     onDismiss: () -> Unit,
-    onConfirm: (amount: Double, minutes: Int, notifyEnabled: Boolean, notifyInterval: Int, tileLabel: String) -> Unit
+    onConfirm: (
+        amount: Double,
+        minutes: Int,
+        notifyEnabled: Boolean,
+        notifyInterval: Int,
+        tileLabel: String,
+        geminiApiKey: String,
+        geminiModel: String
+    ) -> Unit
 ) {
     var amountText by remember { mutableStateOf(String.format(Locale.US, "%.2f", currentAmount)) }
     var minutesText by remember { mutableStateOf(currentMinutes.toString()) }
     var notifyEnabled by remember { mutableStateOf(notificationsEnabled) }
     var intervalText by remember { mutableStateOf(notificationIntervalMinutes.toString()) }
     var tileLabelText by remember { mutableStateOf(currentTileLabel) }
+    var geminiApiKeyText by remember { mutableStateOf(currentGeminiApiKey) }
+    var geminiModelSelected by remember { mutableStateOf(currentGeminiModel.ifBlank { "gemini-2.0-flash" }) }
+    var isApiKeyVisible by remember { mutableStateOf(false) }
+    var isModelMenuExpanded by remember { mutableStateOf(false) }
+    var isTestingKey by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var statusInfoMessage by remember { mutableStateOf<String?>(null) }
     var showChangePinModal by remember { mutableStateOf(false) }
     var showQuickTileInstructions by remember { mutableStateOf(false) }
     val context = LocalContext.current
+
+    val modelOptions = remember {
+        listOf(
+            "Auto (Búsqueda automática)",
+            "gemini-3.5-flash",
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
+            "gemini-1.5-flash-latest",
+            "gemini-1.5-pro",
+            "gemini-2.0-pro-exp",
+            "gemini-pro"
+        )
+    }
 
     if (showChangePinModal) {
         ChangePinDialog(onDismiss = { showChangePinModal = false })
@@ -247,7 +294,7 @@ fun TariffSettingsDialog(
             )
         },
         text = {
-            Column {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 Text(
                     "Tarifa por bloque de parqueo:",
                     style = MaterialTheme.typography.labelMedium,
@@ -437,6 +484,178 @@ fun TariffSettingsDialog(
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Key,
+                        contentDescription = null,
+                        tint = SlateBlue,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Configuración de Google Gemini IA:",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0F172A)
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = geminiApiKeyText,
+                    onValueChange = {
+                        geminiApiKeyText = it
+                        testResult = null
+                    },
+                    label = { Text("API Key de Gemini") },
+                    placeholder = { Text("AIzaSy...") },
+                    singleLine = true,
+                    visualTransformation = if (isApiKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { isApiKeyVisible = !isApiKeyVisible }) {
+                            Icon(
+                                imageVector = if (isApiKeyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                contentDescription = if (isApiKeyVisible) "Ocultar clave" else "Mostrar clave",
+                                tint = Color(0xFF64748B)
+                            )
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("gemini_api_key_input")
+                )
+                Text(
+                    text = "Dejar en blanco para usar la clave por defecto (.env)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF64748B),
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "Modelo de IA Gemini:",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF334155)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = geminiModelSelected,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Modelo de IA") },
+                        trailingIcon = {
+                            IconButton(onClick = { isModelMenuExpanded = !isModelMenuExpanded }) {
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = "Seleccionar Modelo", tint = SlateBlue)
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("gemini_model_selector")
+                    )
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(Color.Transparent)
+                            .testTag("gemini_model_selector_click")
+                            .clickable { isModelMenuExpanded = true }
+                    )
+                    DropdownMenu(
+                        expanded = isModelMenuExpanded,
+                        onDismissRequest = { isModelMenuExpanded = false }
+                    ) {
+                        modelOptions.forEach { modelName ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = modelName,
+                                        fontWeight = if (modelName == geminiModelSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (modelName == geminiModelSelected) SlateBlue else Color(0xFF0F172A)
+                                    )
+                                },
+                                onClick = {
+                                    geminiModelSelected = modelName
+                                    isModelMenuExpanded = false
+                                    testResult = null
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedButton(
+                    onClick = {
+                        if (onTestGeminiKey != null) {
+                            isTestingKey = true
+                            testResult = null
+                            onTestGeminiKey(geminiApiKeyText, geminiModelSelected) { success, message ->
+                                isTestingKey = false
+                                testResult = Pair(success, message)
+                            }
+                        }
+                    },
+                    enabled = !isTestingKey,
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, SlateBlue),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("test_gemini_key_button")
+                ) {
+                    if (isTestingKey) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = SlateBlue
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Probando conexión...", fontSize = 12.sp, color = SlateBlue)
+                    } else {
+                        Icon(
+                            Icons.Default.Key,
+                            contentDescription = null,
+                            tint = SlateBlue,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Probar API Key y Modelo", fontSize = 12.sp, color = SlateBlue, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                testResult?.let { (success, message) ->
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Surface(
+                        color = if (success) Color(0xFFDCFCE7) else Color(0xFFFEE2E2),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (success) Icons.Default.CheckCircle else Icons.Default.Error,
+                                contentDescription = null,
+                                tint = if (success) Color(0xFF16A34A) else ErrorRed,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = message,
+                                color = if (success) Color(0xFF15803D) else Color(0xFF991B1B),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "Seguridad y PIN de Acceso:",
                     style = MaterialTheme.typography.labelMedium,
@@ -486,7 +705,15 @@ fun TariffSettingsDialog(
                     } else if (notifyEnabled && (interval == null || interval <= 0)) {
                         errorMessage = "Ingresa un intervalo de notificación válido mayor a 0 min."
                     } else {
-                        onConfirm(amount, minutes, notifyEnabled, interval ?: 1, cleanTileLabel)
+                        onConfirm(
+                            amount,
+                            minutes,
+                            notifyEnabled,
+                            interval ?: 1,
+                            cleanTileLabel,
+                            geminiApiKeyText.trim(),
+                            geminiModelSelected.trim()
+                        )
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = SlateBlue),

@@ -8,6 +8,7 @@ import com.example.data.ParkingConfig
 import com.example.data.ParkingHistoryItem
 import com.example.data.ParkingRepository
 import com.example.util.NotificationHelper
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,7 +37,14 @@ data class ParkingUiState(
     val showNoFundsToStartAlert: Boolean = false,
     val showEditActiveSessionDialog: Boolean = false,
     val showConfirmStartDialog: Boolean = false,
-    val showConfirmStopDialog: Boolean = false
+    val showConfirmStopDialog: Boolean = false,
+    val showQuickTileStartModal: Boolean = false,
+    val showVoiceAiDialog: Boolean = false,
+    val showVisionAiDialog: Boolean = false,
+    val voiceAiResult: com.example.util.AiRecognitionResult? = null,
+    val visionAiResult: com.example.util.AiRecognitionResult? = null,
+    val capturedBitmap: android.graphics.Bitmap? = null,
+    val isAiProcessing: Boolean = false
 )
 
 class ParkingViewModel(application: Application) : AndroidViewModel(application) {
@@ -271,11 +279,25 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun updateTariffAndNotifications(amount: Double, minutes: Int, notifyEnabled: Boolean, notifyInterval: Int, tileLabel: String = "Parkia") {
+    fun updateTariffAndNotifications(
+        amount: Double,
+        minutes: Int,
+        notifyEnabled: Boolean,
+        notifyInterval: Int,
+        tileLabel: String = "Parkia",
+        geminiApiKey: String = "",
+        geminiModel: String = "gemini-2.0-flash"
+    ) {
         viewModelScope.launch {
-            repository.updateTariff(amount, minutes)
-            repository.updateNotificationSettings(notifyEnabled, notifyInterval)
-            repository.updateTileLabel(tileLabel)
+            repository.updateTariffAndNotifications(
+                amount = amount,
+                minutes = minutes,
+                notifyEnabled = notifyEnabled,
+                notifyInterval = notifyInterval,
+                tileLabel = tileLabel,
+                geminiApiKey = geminiApiKey,
+                geminiModel = geminiModel
+            )
             if (notifyEnabled) {
                 com.example.service.ParkiaForegroundService.startOrUpdate(getApplication(), forceUpdate = true)
             } else {
@@ -285,6 +307,13 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
             com.example.service.ParkiaTileService.updateQuickTileState(getApplication())
             recalculateDerivedValues()
             postRealtimeNotification()
+        }
+    }
+
+    fun testGeminiApiKey(apiKey: String, modelName: String, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val res = com.example.util.GeminiAiParser.testApiKey(apiKey, modelName)
+            onResult(res.first, res.second)
         }
     }
 
@@ -315,6 +344,92 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
 
     fun setShowEditActiveSessionDialog(show: Boolean) {
         _uiState.update { it.copy(showEditActiveSessionDialog = show) }
+    }
+
+    fun setShowQuickTileStartModal(show: Boolean) {
+        _uiState.update { it.copy(showQuickTileStartModal = show) }
+    }
+
+    fun setShowVoiceAiDialog(show: Boolean) {
+        _uiState.update { it.copy(showVoiceAiDialog = show) }
+    }
+
+    fun setShowVisionAiDialog(show: Boolean) {
+        _uiState.update { it.copy(showVisionAiDialog = show) }
+    }
+
+    fun setVoiceAiResult(result: com.example.util.AiRecognitionResult?) {
+        _uiState.update { it.copy(voiceAiResult = result, showVoiceAiDialog = result != null) }
+    }
+
+    fun setVisionAiResult(result: com.example.util.AiRecognitionResult?, bitmap: android.graphics.Bitmap?) {
+        _uiState.update { it.copy(visionAiResult = result, capturedBitmap = bitmap, showVisionAiDialog = result != null) }
+    }
+
+    fun processVoiceAi(rawText: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(isAiProcessing = true) }
+            val config = _uiState.value.config
+            val result = try {
+                com.example.util.GeminiAiParser.parseSpeech(
+                    rawText = rawText,
+                    customApiKey = config.customGeminiApiKey,
+                    customModel = config.customGeminiModel
+                )
+            } catch (t: Throwable) {
+                com.example.util.VoiceAiParser.parseSpeech(rawText)
+            }
+            _uiState.update {
+                it.copy(
+                    isAiProcessing = false,
+                    voiceAiResult = result,
+                    showVoiceAiDialog = true
+                )
+            }
+        }
+    }
+
+    fun processVisionAi(bitmap: android.graphics.Bitmap) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(isAiProcessing = true) }
+            val config = _uiState.value.config
+            val result = try {
+                com.example.util.GeminiAiParser.processImage(
+                    bitmap = bitmap,
+                    customApiKey = config.customGeminiApiKey,
+                    customModel = config.customGeminiModel
+                )
+            } catch (t: Throwable) {
+                android.util.Log.e("ParkiaAi", "Error en processVisionAi", t)
+                com.example.util.AiRecognitionResult(
+                    rawText = "Procesado con foto capturada. Detalle: ${t.localizedMessage ?: t.message ?: t.javaClass.simpleName}"
+                )
+            }
+            _uiState.update {
+                it.copy(
+                    isAiProcessing = false,
+                    visionAiResult = result,
+                    capturedBitmap = bitmap,
+                    showVisionAiDialog = true
+                )
+            }
+        }
+    }
+
+    fun startCustomSession(initialBalance: Double, timestamp: Long = System.currentTimeMillis()) {
+        viewModelScope.launch {
+            if (initialBalance >= 0.0) {
+                repository.setBalance(initialBalance)
+            }
+            val started = repository.startSession(now = timestamp)
+            if (!started) {
+                _uiState.update { it.copy(showNoFundsToStartAlert = true) }
+            } else {
+                recalculateDerivedValues()
+                postRealtimeNotification()
+                com.example.service.ParkiaTileService.updateQuickTileState(getApplication())
+            }
+        }
     }
 
     fun dismissExhaustedAlert() {

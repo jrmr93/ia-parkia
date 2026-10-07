@@ -18,7 +18,9 @@ data class ParkingConfig(
     val accumulatedCost: Double = 0.0,
     val notificationsEnabled: Boolean = true,
     val notificationIntervalMinutes: Int = 1,
-    val tileLabel: String = "Parkia"
+    val tileLabel: String = "Parkia",
+    val customGeminiApiKey: String = "",
+    val customGeminiModel: String = "gemini-2.0-flash"
 )
 
 @Entity(tableName = "parking_history")

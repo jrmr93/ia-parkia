@@ -50,56 +50,21 @@ class ParkiaTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
-        val tile = qsTile ?: return
-        val repository = ParkingRepository(
-            AppDatabase.getDatabase(applicationContext).parkingDao()
-        )
-
-        runBlocking(Dispatchers.IO) {
-            val config = repository.getOrCreateConfig()
-            val label = if (config.tileLabel.isBlank()) "Parkia" else config.tileLabel
-
-            if (config.isSessionActive) {
-                repository.stopSession(reason = "Finalizado por acceso rápido")
-                tile.label = label
-                tile.subtitle = "En Reposo"
-                tile.state = Tile.STATE_INACTIVE
-                tile.updateTile()
-                ParkiaForegroundService.startOrUpdate(applicationContext, forceUpdate = true)
-            } else {
-                if (config.balance >= config.rateAmount && config.rateAmount > 0.0) {
-                    val started = repository.startSession()
-                    if (started) {
-                        tile.label = label
-                        tile.subtitle = "Sesión Activa"
-                        tile.state = Tile.STATE_ACTIVE
-                        tile.updateTile()
-                        ParkiaForegroundService.startOrUpdate(applicationContext, forceUpdate = true)
-                    }
-                } else {
-                    tile.label = label
-                    tile.subtitle = "Sin Saldo"
-                    tile.state = Tile.STATE_UNAVAILABLE
-                    tile.updateTile()
-
-                    // Launch main app so user can recharge balance
-                    val intent = Intent(applicationContext, MainActivity::class.java).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                        val pendingIntent = android.app.PendingIntent.getActivity(
-                            this@ParkiaTileService,
-                            0,
-                            intent,
-                            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
-                        )
-                        startActivityAndCollapse(pendingIntent)
-                    } else {
-                        @Suppress("DEPRECATION")
-                        startActivityAndCollapse(intent)
-                    }
-                }
-            }
+        val intent = Intent(applicationContext, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("EXTRA_FROM_QUICK_TILE", true)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            val pendingIntent = android.app.PendingIntent.getActivity(
+                this@ParkiaTileService,
+                0,
+                intent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+            startActivityAndCollapse(pendingIntent)
+        } else {
+            @Suppress("DEPRECATION")
+            startActivityAndCollapse(intent)
         }
     }
 
