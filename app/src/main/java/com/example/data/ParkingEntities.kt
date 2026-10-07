@@ -17,7 +17,8 @@ data class ParkingConfig(
     val elapsedSeconds: Long = 0L,
     val accumulatedCost: Double = 0.0,
     val notificationsEnabled: Boolean = true,
-    val notificationIntervalMinutes: Int = 1
+    val notificationIntervalMinutes: Int = 1,
+    val tileLabel: String = "Parkia"
 )
 
 @Entity(tableName = "parking_history")

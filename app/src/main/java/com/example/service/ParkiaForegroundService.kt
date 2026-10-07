@@ -107,10 +107,14 @@ class ParkiaForegroundService : Service() {
 
     private suspend fun updateNotification(repository: ParkingRepository) {
         val config = repository.getOrCreateConfig()
+        val wasActive = config.isSessionActive
         if (config.isSessionActive) {
             repository.catchUpSession()
         }
         val updatedConfig = repository.getOrCreateConfig()
+        if (wasActive != updatedConfig.isSessionActive) {
+            ParkiaTileService.updateQuickTileState(applicationContext)
+        }
         val nowFormatted = dateTimeFormat.format(Date())
 
         NotificationHelper.showBalanceNotification(

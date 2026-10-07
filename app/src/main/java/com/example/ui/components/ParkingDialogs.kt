@@ -205,14 +205,17 @@ fun TariffSettingsDialog(
     currentMinutes: Int,
     notificationsEnabled: Boolean,
     notificationIntervalMinutes: Int,
+    currentTileLabel: String = "Parkia",
     onDismiss: () -> Unit,
-    onConfirm: (amount: Double, minutes: Int, notifyEnabled: Boolean, notifyInterval: Int) -> Unit
+    onConfirm: (amount: Double, minutes: Int, notifyEnabled: Boolean, notifyInterval: Int, tileLabel: String) -> Unit
 ) {
     var amountText by remember { mutableStateOf(String.format(Locale.US, "%.2f", currentAmount)) }
     var minutesText by remember { mutableStateOf(currentMinutes.toString()) }
     var notifyEnabled by remember { mutableStateOf(notificationsEnabled) }
     var intervalText by remember { mutableStateOf(notificationIntervalMinutes.toString()) }
+    var tileLabelText by remember { mutableStateOf(currentTileLabel) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var statusInfoMessage by remember { mutableStateOf<String?>(null) }
     var showChangePinModal by remember { mutableStateOf(false) }
     var showQuickTileInstructions by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -349,41 +352,88 @@ fun TariffSettingsDialog(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
-                OutlinedButton(
-                    onClick = {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            try {
-                                val statusBarManager = context.getSystemService(android.content.Context.STATUS_BAR_SERVICE) as? android.app.StatusBarManager
-                                val componentName = android.content.ComponentName(context, com.example.service.ParkiaTileService::class.java)
-                                statusBarManager?.requestAddTileService(
-                                    componentName,
-                                    "Abrir Parkia",
-                                    android.graphics.drawable.Icon.createWithResource(context, com.example.R.drawable.ic_car),
-                                    androidx.core.content.ContextCompat.getMainExecutor(context)
-                                ) { _ -> }
-                            } catch (_: Exception) {}
-                        }
-                        showQuickTileInstructions = true
+                OutlinedTextField(
+                    value = tileLabelText,
+                    onValueChange = {
+                        tileLabelText = it
+                        errorMessage = null
                     },
-                    shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(1.dp, SlateBlue),
+                    label = { Text("Nombre del Acceso Rápido") },
+                    placeholder = { Text("Ej. Parkia") },
+                    singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("add_quick_tile_button")
+                        .testTag("tile_label_input")
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        Icons.Default.DirectionsCar,
-                        contentDescription = null,
-                        tint = SlateBlue,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Agregar Acceso Rápido al Panel",
-                        color = SlateBlue,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
-                    )
+                    OutlinedButton(
+                        onClick = {
+                            com.example.service.ParkiaTileService.setTileComponentEnabled(context, true)
+                            statusInfoMessage = "Acceso rápido activado."
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                try {
+                                    val statusBarManager = context.getSystemService(android.content.Context.STATUS_BAR_SERVICE) as? android.app.StatusBarManager
+                                    val componentName = android.content.ComponentName(context, com.example.service.ParkiaTileService::class.java)
+                                    val cleanLabel = if (tileLabelText.isBlank()) "Parkia" else tileLabelText.trim()
+                                    statusBarManager?.requestAddTileService(
+                                        componentName,
+                                        cleanLabel,
+                                        android.graphics.drawable.Icon.createWithResource(context, com.example.R.drawable.ic_car),
+                                        androidx.core.content.ContextCompat.getMainExecutor(context)
+                                    ) { _ -> }
+                                } catch (_: Exception) {}
+                            }
+                            showQuickTileInstructions = true
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, SlateBlue),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("add_quick_tile_button")
+                    ) {
+                        Icon(
+                            Icons.Default.DirectionsCar,
+                            contentDescription = null,
+                            tint = SlateBlue,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Crear / Agregar",
+                            color = SlateBlue,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            com.example.service.ParkiaTileService.setTileComponentEnabled(context, false)
+                            statusInfoMessage = "Acceso rápido desactivado y eliminado del panel."
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, ErrorRed),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("remove_quick_tile_button")
+                    ) {
+                        Text(
+                            text = "Quitar / Eliminar",
+                            color = ErrorRed,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                statusInfoMessage?.let {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(it, color = SlateBlue, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -430,12 +480,13 @@ fun TariffSettingsDialog(
                     val amount = amountText.replace(',', '.').toDoubleOrNull()
                     val minutes = minutesText.toIntOrNull()
                     val interval = intervalText.toIntOrNull()
+                    val cleanTileLabel = if (tileLabelText.isBlank()) "Parkia" else tileLabelText.trim()
                     if (amount == null || amount <= 0.0 || minutes == null || minutes <= 0) {
                         errorMessage = "Ingresa valores numéricos válidos para la tarifa."
                     } else if (notifyEnabled && (interval == null || interval <= 0)) {
                         errorMessage = "Ingresa un intervalo de notificación válido mayor a 0 min."
                     } else {
-                        onConfirm(amount, minutes, notifyEnabled, interval ?: 1)
+                        onConfirm(amount, minutes, notifyEnabled, interval ?: 1, cleanTileLabel)
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = SlateBlue),

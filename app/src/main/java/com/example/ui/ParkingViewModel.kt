@@ -76,6 +76,7 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                     _uiState.update { it.copy(config = updatedConfig) }
                     recalculateDerivedValues()
                     manageTicker(updatedConfig)
+                    com.example.service.ParkiaTileService.updateQuickTileState(getApplication())
                 }
             }
         }
@@ -270,16 +271,18 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun updateTariffAndNotifications(amount: Double, minutes: Int, notifyEnabled: Boolean, notifyInterval: Int) {
+    fun updateTariffAndNotifications(amount: Double, minutes: Int, notifyEnabled: Boolean, notifyInterval: Int, tileLabel: String = "Parkia") {
         viewModelScope.launch {
             repository.updateTariff(amount, minutes)
             repository.updateNotificationSettings(notifyEnabled, notifyInterval)
+            repository.updateTileLabel(tileLabel)
             if (notifyEnabled) {
                 com.example.service.ParkiaForegroundService.startOrUpdate(getApplication(), forceUpdate = true)
             } else {
                 com.example.service.ParkiaForegroundService.stop(getApplication())
             }
             com.example.util.BalanceNotificationWorker.scheduleOrCancel(getApplication(), notifyEnabled, notifyInterval)
+            com.example.service.ParkiaTileService.updateQuickTileState(getApplication())
             recalculateDerivedValues()
             postRealtimeNotification()
         }

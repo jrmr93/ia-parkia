@@ -248,9 +248,10 @@ fun ParkingMainScreen(
             currentMinutes = uiState.config.rateMinutes,
             notificationsEnabled = uiState.config.notificationsEnabled,
             notificationIntervalMinutes = uiState.config.notificationIntervalMinutes,
+            currentTileLabel = uiState.config.tileLabel,
             onDismiss = { viewModel.setShowTariffSettingsDialog(false) },
-            onConfirm = { amount, minutes, notifyEnabled, notifyInterval ->
-                viewModel.updateTariffAndNotifications(amount, minutes, notifyEnabled, notifyInterval)
+            onConfirm = { amount, minutes, notifyEnabled, notifyInterval, tileLabel ->
+                viewModel.updateTariffAndNotifications(amount, minutes, notifyEnabled, notifyInterval, tileLabel)
                 viewModel.setShowTariffSettingsDialog(false)
             }
         )

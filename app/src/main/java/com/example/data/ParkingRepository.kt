@@ -382,4 +382,14 @@ class ParkingRepository(private val dao: ParkingDao) {
             )
         )
     }
+
+    suspend fun updateTileLabel(label: String) = withContext(Dispatchers.IO) {
+        val config = getOrCreateConfig()
+        val cleanLabel = if (label.isBlank()) "Parkia" else label.trim()
+        dao.saveConfig(
+            config.copy(
+                tileLabel = cleanLabel
+            )
+        )
+    }
 }
