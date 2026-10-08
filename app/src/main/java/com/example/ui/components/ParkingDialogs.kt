@@ -238,6 +238,7 @@ fun TariffSettingsDialog(
     geofenceLatitude: Double = 0.0,
     geofenceLongitude: Double = 0.0,
     geofenceRadiusMeters: Float = 100f,
+    isSessionActive: Boolean = false,
     onTestGeminiKey: ((apiKey: String, modelName: String, onResult: (Boolean, String) -> Unit) -> Unit)? = null,
     onDismiss: () -> Unit,
     onConfirm: (
@@ -556,8 +557,9 @@ fun TariffSettingsDialog(
 
                     OutlinedButton(
                         onClick = {
-                            NotificationHelper.showGeofenceNotification(context, isSessionActive = false)
-                            Toast.makeText(context, "Notificación enviada: Simulación de Aproximación", Toast.LENGTH_SHORT).show()
+                            NotificationHelper.showGeofenceNotification(context, isSessionActive = isSessionActive)
+                            val simText = if (isSessionActive) "Notificación enviada: Simulación (Terminar Sesión)" else "Notificación enviada: Simulación (Iniciar Sesión)"
+                            Toast.makeText(context, simText, Toast.LENGTH_SHORT).show()
                         },
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth().testTag("test_geofence_notification_button")
@@ -570,7 +572,7 @@ fun TariffSettingsDialog(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "🧪 Probar Notificación (Simular Aproximación)",
+                            text = if (isSessionActive) "🧪 Probar Notificación (Simular Terminar Sesión)" else "🧪 Probar Notificación (Simular Iniciar Sesión)",
                             color = SlateBlue,
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp

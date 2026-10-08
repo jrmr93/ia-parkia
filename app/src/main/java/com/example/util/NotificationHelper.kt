@@ -128,13 +128,13 @@ object NotificationHelper {
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
 
-        val title = if (isSessionActive) "Parqueadero Detectado" else "Aproximación al Parqueadero"
+        val title = if (isSessionActive) "Parqueadero Detectado - Sesión Activa" else "Parqueadero Detectado - Sin Sesión Activa"
         val content = if (isSessionActive)
-            "Estás en el parqueadero y tienes una sesión activa. ¿Deseas registrar la salida?"
+            "Tienes una sesión de parqueo activa en esta ubicación. Toca para registrar la salida y terminar la sesión."
         else
-            "Te estás acercando al parqueadero. ¿Deseas registrar tu ingreso?"
+            "Te encuentras cerca del parqueadero y no tienes ninguna sesión activa. Toca para registrar el ingreso e iniciar sesión."
 
-        val actionText = if (isSessionActive) "Registrar Salida" else "Registrar Ingreso"
+        val actionText = if (isSessionActive) "Terminar Sesión" else "Iniciar Sesión"
 
         val notification = NotificationCompat.Builder(context, GEOFENCE_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_car)

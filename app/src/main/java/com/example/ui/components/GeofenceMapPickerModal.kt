@@ -87,17 +87,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
-import com.google.android.gms.maps.model.CameraPosition
-import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.tasks.CancellationTokenSource
-import com.google.maps.android.compose.Circle
-import com.google.maps.android.compose.GoogleMap
-import com.google.maps.android.compose.MapProperties
-import com.google.maps.android.compose.MapType
-import com.google.maps.android.compose.MapUiSettings
-import com.google.maps.android.compose.Marker
-import com.google.maps.android.compose.rememberCameraPositionState
-import com.google.maps.android.compose.rememberMarkerState
 import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.atan
@@ -160,58 +150,6 @@ fun getBestDeviceLocation(context: Context, onLocationFound: (Double, Double) ->
         if (lat != 0.0 && lng != 0.0) {
             onLocationFound(lat, lng)
         }
-    }
-}
-
-enum class MapEngine {
-    GOOGLE_MAPS,
-    OPEN_STREET_MAP
-}
-
-@Composable
-fun GoogleMapPickerView(
-    latitude: Double,
-    longitude: Double,
-    radiusMeters: Float,
-    onLocationChange: (Double, Double) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val lat = if (latitude != 0.0) latitude else -0.180653
-    val lng = if (longitude != 0.0) longitude else -78.467838
-    val parkiaPos = remember(lat, lng) { LatLng(lat, lng) }
-    val markerState = rememberMarkerState(position = parkiaPos)
-    val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(parkiaPos, 17f)
-    }
-
-    LaunchedEffect(lat, lng) {
-        markerState.position = parkiaPos
-        cameraPositionState.position = CameraPosition.fromLatLngZoom(parkiaPos, cameraPositionState.position.zoom)
-    }
-
-    GoogleMap(
-        modifier = modifier.fillMaxSize(),
-        cameraPositionState = cameraPositionState,
-        properties = remember { MapProperties(mapType = MapType.NORMAL, isMyLocationEnabled = false) },
-        uiSettings = remember { MapUiSettings(zoomControlsEnabled = true, myLocationButtonEnabled = false) },
-        onMapClick = { target ->
-            onLocationChange(target.latitude, target.longitude)
-        }
-    ) {
-        Marker(
-            state = markerState,
-            title = "Parqueadero Parkia",
-            snippet = "Centro Geocerca (${radiusMeters.toInt()}m)",
-            draggable = true,
-            onInfoWindowClick = {},
-        )
-        Circle(
-            center = parkiaPos,
-            radius = radiusMeters.toDouble(),
-            strokeColor = Color(0xFF4F46E5),
-            fillColor = Color(0x334F46E5),
-            strokeWidth = 4f
-        )
     }
 }
 
@@ -446,7 +384,6 @@ fun GeofenceInteractiveMapCard(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var mapEngine by remember { mutableStateOf(MapEngine.OPEN_STREET_MAP) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -523,65 +460,6 @@ fun GeofenceInteractiveMapCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Map Provider Selector Engine Chips
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Mapa:",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF64748B)
-                )
-
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = if (mapEngine == MapEngine.OPEN_STREET_MAP) Color(0xFF4F46E5) else Color(0xFFE2E8F0),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { mapEngine = MapEngine.OPEN_STREET_MAP }
-                ) {
-                    Text(
-                        text = "OpenStreetMap (Gratis)",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (mapEngine == MapEngine.OPEN_STREET_MAP) Color.White else Color(0xFF475569),
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                    )
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = if (mapEngine == MapEngine.GOOGLE_MAPS) Color(0xFF4F46E5) else Color(0xFFE2E8F0),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { mapEngine = MapEngine.GOOGLE_MAPS }
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Map,
-                            contentDescription = null,
-                            tint = if (mapEngine == MapEngine.GOOGLE_MAPS) Color.White else Color(0xFF475569),
-                            modifier = Modifier.size(11.dp)
-                        )
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text(
-                            text = "Google Maps",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (mapEngine == MapEngine.GOOGLE_MAPS) Color.White else Color(0xFF475569)
-                        )
-                    }
-                }
-            }
-
             Spacer(modifier = Modifier.height(6.dp))
 
             // Map View Box (Expands in weight)
@@ -592,47 +470,13 @@ fun GeofenceInteractiveMapCard(
                     .background(Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
                     .border(1.dp, Color(0xFFCBD5E1), RoundedCornerShape(12.dp))
             ) {
-                if (mapEngine == MapEngine.GOOGLE_MAPS) {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        GoogleMapPickerView(
-                            latitude = latitude,
-                            longitude = longitude,
-                            radiusMeters = radiusMeters,
-                            onLocationChange = onLocationChange,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        Surface(
-                            modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .fillMaxWidth()
-                                .padding(6.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color(0xEEFEF2F2),
-                            border = BorderStroke(1.dp, Color(0xFFFCA5A5))
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Default.Info, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "Google Maps requiere clave de API de Google Cloud. Si sale en blanco, usa OpenStreetMap.",
-                                    fontSize = 10.sp,
-                                    color = Color(0xFF991B1B)
-                                )
-                            }
-                        }
-                    }
-                } else {
-                    NativeOpenStreetMap(
-                        latitude = latitude,
-                        longitude = longitude,
-                        radiusMeters = radiusMeters,
-                        onLocationChange = onLocationChange,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
+                NativeOpenStreetMap(
+                    latitude = latitude,
+                    longitude = longitude,
+                    radiusMeters = radiusMeters,
+                    onLocationChange = onLocationChange,
+                    modifier = Modifier.fillMaxSize()
+                )
             }
 
             Spacer(modifier = Modifier.height(6.dp))

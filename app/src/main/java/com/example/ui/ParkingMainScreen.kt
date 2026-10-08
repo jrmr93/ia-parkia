@@ -263,6 +263,7 @@ fun ParkingMainScreen(
             geofenceLatitude = uiState.config.geofenceLatitude,
             geofenceLongitude = uiState.config.geofenceLongitude,
             geofenceRadiusMeters = uiState.config.geofenceRadiusMeters,
+            isSessionActive = uiState.config.isSessionActive,
             onTestGeminiKey = { apiKey, modelName, onResult ->
                 viewModel.testGeminiApiKey(apiKey, modelName, onResult)
             },
