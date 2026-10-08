@@ -20,7 +20,9 @@ data class ParkingConfig(
     val notificationIntervalMinutes: Int = 1,
     val tileLabel: String = "Parkia",
     val customGeminiApiKey: String = "",
-    val customGeminiModel: String = "gemini-2.0-flash"
+    val customGeminiModel: String = "gemini-2.0-flash",
+    val isGeminiEnabled: Boolean = true,
+    val quickTileBiometricEnabled: Boolean = true
 )
 
 @Entity(tableName = "parking_history")

@@ -82,6 +82,7 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
             repository.configFlow.collect { updatedConfig ->
                 if (updatedConfig != null) {
                     _uiState.update { it.copy(config = updatedConfig) }
+                    com.example.util.SecurityManager.setQuickTileBiometricEnabled(getApplication(), updatedConfig.quickTileBiometricEnabled)
                     recalculateDerivedValues()
                     manageTicker(updatedConfig)
                     com.example.service.ParkiaTileService.updateQuickTileState(getApplication())
@@ -286,7 +287,9 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
         notifyInterval: Int,
         tileLabel: String = "Parkia",
         geminiApiKey: String = "",
-        geminiModel: String = "gemini-2.0-flash"
+        geminiModel: String = "gemini-2.0-flash",
+        isGeminiEnabled: Boolean = true,
+        quickTileBiometricEnabled: Boolean = true
     ) {
         viewModelScope.launch {
             repository.updateTariffAndNotifications(
@@ -296,8 +299,11 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                 notifyInterval = notifyInterval,
                 tileLabel = tileLabel,
                 geminiApiKey = geminiApiKey,
-                geminiModel = geminiModel
+                geminiModel = geminiModel,
+                isGeminiEnabled = isGeminiEnabled,
+                quickTileBiometricEnabled = quickTileBiometricEnabled
             )
+            com.example.util.SecurityManager.setQuickTileBiometricEnabled(getApplication(), quickTileBiometricEnabled)
             if (notifyEnabled) {
                 com.example.service.ParkiaForegroundService.startOrUpdate(getApplication(), forceUpdate = true)
             } else {
@@ -374,7 +380,8 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                 com.example.util.GeminiAiParser.parseSpeech(
                     rawText = rawText,
                     customApiKey = config.customGeminiApiKey,
-                    customModel = config.customGeminiModel
+                    customModel = config.customGeminiModel,
+                    isGeminiEnabled = config.isGeminiEnabled
                 )
             } catch (t: Throwable) {
                 com.example.util.VoiceAiParser.parseSpeech(rawText)
@@ -397,7 +404,8 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                 com.example.util.GeminiAiParser.processImage(
                     bitmap = bitmap,
                     customApiKey = config.customGeminiApiKey,
-                    customModel = config.customGeminiModel
+                    customModel = config.customGeminiModel,
+                    isGeminiEnabled = config.isGeminiEnabled
                 )
             } catch (t: Throwable) {
                 android.util.Log.e("ParkiaAi", "Error en processVisionAi", t)

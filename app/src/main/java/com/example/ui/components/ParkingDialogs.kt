@@ -33,7 +33,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -223,6 +225,8 @@ fun TariffSettingsDialog(
     currentTileLabel: String = "Parkia",
     currentGeminiApiKey: String = "",
     currentGeminiModel: String = "gemini-2.0-flash",
+    isGeminiEnabled: Boolean = true,
+    quickTileBiometricEnabled: Boolean = true,
     onTestGeminiKey: ((apiKey: String, modelName: String, onResult: (Boolean, String) -> Unit) -> Unit)? = null,
     onDismiss: () -> Unit,
     onConfirm: (
@@ -232,7 +236,9 @@ fun TariffSettingsDialog(
         notifyInterval: Int,
         tileLabel: String,
         geminiApiKey: String,
-        geminiModel: String
+        geminiModel: String,
+        isGeminiEnabled: Boolean,
+        quickTileBiometricEnabled: Boolean
     ) -> Unit
 ) {
     var amountText by remember { mutableStateOf(String.format(Locale.US, "%.2f", currentAmount)) }
@@ -242,6 +248,8 @@ fun TariffSettingsDialog(
     var tileLabelText by remember { mutableStateOf(currentTileLabel) }
     var geminiApiKeyText by remember { mutableStateOf(currentGeminiApiKey) }
     var geminiModelSelected by remember { mutableStateOf(currentGeminiModel.ifBlank { "gemini-2.0-flash" }) }
+    var geminiEnabled by remember { mutableStateOf(isGeminiEnabled) }
+    var quickTileBiometric by remember { mutableStateOf(quickTileBiometricEnabled) }
     var isApiKeyVisible by remember { mutableStateOf(false) }
     var isModelMenuExpanded by remember { mutableStateOf(false) }
     var isTestingKey by remember { mutableStateOf(false) }
@@ -483,10 +491,50 @@ fun TariffSettingsDialog(
                     Text(it, color = SlateBlue, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
                 }
 
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = SlateBlue,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Autenticación en Acceso Rápido",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF334155)
+                            )
+                            Text(
+                                text = if (quickTileBiometric) "Requerir PIN / Huella al presionar Acceso Rápido" else "Sin autenticación al presionar Acceso Rápido",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF64748B),
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = quickTileBiometric,
+                        onCheckedChange = { quickTileBiometric = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = SlateBlue
+                        ),
+                        modifier = Modifier.testTag("toggle_quick_tile_biometric_switch")
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        Icons.Default.Key,
+                        Icons.Default.AutoAwesome,
                         contentDescription = null,
                         tint = SlateBlue,
                         modifier = Modifier.size(20.dp)
@@ -497,6 +545,46 @@ fun TariffSettingsDialog(
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF0F172A)
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = if (geminiEnabled) SlateBlue else Color(0xFF94A3B8),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Activar Uso de API Gemini IA",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF334155)
+                            )
+                            Text(
+                                text = if (geminiEnabled) "Uso activo de API Gemini en voz/fotos" else "API desactivada (Usa procesamiento local)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF64748B),
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = geminiEnabled,
+                        onCheckedChange = { geminiEnabled = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = SlateBlue
+                        ),
+                        modifier = Modifier.testTag("toggle_gemini_api_switch")
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -712,7 +800,9 @@ fun TariffSettingsDialog(
                             interval ?: 1,
                             cleanTileLabel,
                             geminiApiKeyText.trim(),
-                            geminiModelSelected.trim()
+                            geminiModelSelected.trim(),
+                            geminiEnabled,
+                            quickTileBiometric
                         )
                     }
                 },

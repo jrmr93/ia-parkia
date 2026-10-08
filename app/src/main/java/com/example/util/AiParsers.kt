@@ -135,8 +135,16 @@ object GeminiAiParser {
     suspend fun parseSpeech(
         rawText: String,
         customApiKey: String? = null,
-        customModel: String? = null
+        customModel: String? = null,
+        isGeminiEnabled: Boolean = true
     ): AiRecognitionResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        if (!isGeminiEnabled) {
+            return@withContext VoiceAiParser.parseSpeech(rawText).copy(
+                usedGemini = false,
+                engineName = "Fallback Local (Dictado Android)",
+                engineDetail = "La API de Gemini IA está desactivada en la configuración de la app."
+            )
+        }
         val cleanKey = customApiKey?.trim()
         val apiKey = if (!cleanKey.isNullOrBlank() && cleanKey != "DEFAULT_KEY") cleanKey else BuildConfig.GEMINI_API_KEY.trim()
         if (apiKey.isBlank() || apiKey == "DEFAULT_KEY") {
@@ -222,8 +230,17 @@ object GeminiAiParser {
     suspend fun processImage(
         bitmap: Bitmap,
         customApiKey: String? = null,
-        customModel: String? = null
+        customModel: String? = null,
+        isGeminiEnabled: Boolean = true
     ): AiRecognitionResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        if (!isGeminiEnabled) {
+            val localResult = processImageLocal(bitmap)
+            return@withContext localResult.copy(
+                usedGemini = false,
+                engineName = "Fallback Local (ML Kit OCR)",
+                engineDetail = "La API de Gemini IA está desactivada en la configuración de la app."
+            )
+        }
         val cleanKey = customApiKey?.trim()
         val apiKey = if (!cleanKey.isNullOrBlank() && cleanKey != "DEFAULT_KEY") cleanKey else BuildConfig.GEMINI_API_KEY.trim()
         var lastError: String? = if (apiKey.isBlank() || apiKey == "DEFAULT_KEY") "GEMINI_API_KEY no configurada" else null
@@ -323,7 +340,7 @@ object GeminiAiParser {
         )
     }
 
-    private suspend fun processImageLocal(bitmap: Bitmap): AiRecognitionResult {
+    suspend fun processImageLocal(bitmap: Bitmap): AiRecognitionResult {
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val image = InputImage.fromBitmap(bitmap, 0)

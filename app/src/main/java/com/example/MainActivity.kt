@@ -68,10 +68,14 @@ class MainActivity : FragmentActivity() {
   private fun checkTileIntent(intent: android.content.Intent?) {
     if (intent?.getBooleanExtra("EXTRA_FROM_QUICK_TILE", false) == true) {
       intent.removeExtra("EXTRA_FROM_QUICK_TILE")
-      if (SecurityManager.isPinConfigured(this)) {
+      val isBiometricRequired = SecurityManager.isQuickTileBiometricEnabled(this)
+      if (isBiometricRequired && SecurityManager.isPinConfigured(this)) {
         isUnlocked = false
+        pendingTileAction = true
+      } else {
+        isUnlocked = true
+        handleTileAction()
       }
-      pendingTileAction = true
     }
   }
 

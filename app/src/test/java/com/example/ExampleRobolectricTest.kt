@@ -188,4 +188,47 @@ class ExampleRobolectricTest {
         val time2 = repository.calculateAvailableTime(balance, 0.50, 60)
         assertEquals("2h 0m", time2)
     }
+
+    @Test
+    fun `gemini api switch disables remote api calls and uses local fallback`() = runBlocking {
+        val defaultConfig = repository.getOrCreateConfig()
+        assertTrue(defaultConfig.isGeminiEnabled)
+
+        // Disable Gemini API
+        repository.updateTariffAndNotifications(
+            amount = 0.10,
+            minutes = 30,
+            notifyEnabled = true,
+            notifyInterval = 1,
+            tileLabel = "Parkia",
+            geminiApiKey = "",
+            geminiModel = "gemini-2.0-flash",
+            isGeminiEnabled = false,
+            quickTileBiometricEnabled = true
+        )
+
+        val updated = repository.getOrCreateConfig()
+        assertFalse(updated.isGeminiEnabled)
+
+        val result = com.example.util.GeminiAiParser.parseSpeech("saldo 25.50", isGeminiEnabled = false)
+        assertFalse(result.usedGemini)
+        assertEquals(25.50, result.balance!!, 0.001)
+        assertTrue(result.engineDetail?.contains("desactivada") == true)
+    }
+
+    @Test
+    fun `quick tile biometric setting toggles security manager preference`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        
+        // Initial state is true
+        assertTrue(SecurityManager.isQuickTileBiometricEnabled(context))
+
+        // Save setting as false
+        SecurityManager.setQuickTileBiometricEnabled(context, false)
+        assertFalse(SecurityManager.isQuickTileBiometricEnabled(context))
+
+        // Save setting as true
+        SecurityManager.setQuickTileBiometricEnabled(context, true)
+        assertTrue(SecurityManager.isQuickTileBiometricEnabled(context))
+    }
 }
