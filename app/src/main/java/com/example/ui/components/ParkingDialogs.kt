@@ -227,6 +227,7 @@ fun TariffSettingsDialog(
     currentGeminiModel: String = "gemini-2.0-flash",
     isGeminiEnabled: Boolean = true,
     quickTileBiometricEnabled: Boolean = true,
+    globalSecurityAuthEnabled: Boolean = true,
     onTestGeminiKey: ((apiKey: String, modelName: String, onResult: (Boolean, String) -> Unit) -> Unit)? = null,
     onDismiss: () -> Unit,
     onConfirm: (
@@ -238,7 +239,8 @@ fun TariffSettingsDialog(
         geminiApiKey: String,
         geminiModel: String,
         isGeminiEnabled: Boolean,
-        quickTileBiometricEnabled: Boolean
+        quickTileBiometricEnabled: Boolean,
+        globalSecurityAuthEnabled: Boolean
     ) -> Unit
 ) {
     var amountText by remember { mutableStateOf(String.format(Locale.US, "%.2f", currentAmount)) }
@@ -250,6 +252,7 @@ fun TariffSettingsDialog(
     var geminiModelSelected by remember { mutableStateOf(currentGeminiModel.ifBlank { "gemini-2.0-flash" }) }
     var geminiEnabled by remember { mutableStateOf(isGeminiEnabled) }
     var quickTileBiometric by remember { mutableStateOf(quickTileBiometricEnabled) }
+    var globalAuthEnabled by remember { mutableStateOf(globalSecurityAuthEnabled) }
     var isApiKeyVisible by remember { mutableStateOf(false) }
     var isModelMenuExpanded by remember { mutableStateOf(false) }
     var isTestingKey by remember { mutableStateOf(false) }
@@ -752,6 +755,47 @@ fun TariffSettingsDialog(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = SlateBlue,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Autenticación General de la App",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF334155)
+                            )
+                            Text(
+                                text = if (globalAuthEnabled) "Requerir PIN / Biometría al abrir la app" else "Autenticación desactivada en toda la app (acceso libre)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF64748B),
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = globalAuthEnabled,
+                        onCheckedChange = { globalAuthEnabled = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = SlateBlue
+                        ),
+                        modifier = Modifier.testTag("toggle_global_auth_switch")
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
                 OutlinedButton(
                     onClick = { showChangePinModal = true },
                     shape = RoundedCornerShape(10.dp),
@@ -802,7 +846,8 @@ fun TariffSettingsDialog(
                             geminiApiKeyText.trim(),
                             geminiModelSelected.trim(),
                             geminiEnabled,
-                            quickTileBiometric
+                            quickTileBiometric,
+                            globalAuthEnabled
                         )
                     }
                 },

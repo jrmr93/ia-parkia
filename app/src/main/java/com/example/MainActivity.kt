@@ -40,8 +40,9 @@ class MainActivity : FragmentActivity() {
     setContent {
       MyApplicationTheme {
         val isPinConfigured = SecurityManager.isPinConfigured(this@MainActivity)
+        val isGlobalAuthEnabled = SecurityManager.isGlobalAuthEnabled(this@MainActivity)
 
-        if (!isUnlocked) {
+        if (!isUnlocked && isGlobalAuthEnabled) {
           SecurityLockScreen(
             isInitialSetup = !isPinConfigured,
             onAuthenticated = {
@@ -53,6 +54,9 @@ class MainActivity : FragmentActivity() {
             }
           )
         } else {
+          if (!isUnlocked) {
+            isUnlocked = true
+          }
           ParkingMainScreen(viewModel = parkingViewModel)
         }
       }
@@ -68,8 +72,9 @@ class MainActivity : FragmentActivity() {
   private fun checkTileIntent(intent: android.content.Intent?) {
     if (intent?.getBooleanExtra("EXTRA_FROM_QUICK_TILE", false) == true) {
       intent.removeExtra("EXTRA_FROM_QUICK_TILE")
+      val isGlobalAuthEnabled = SecurityManager.isGlobalAuthEnabled(this)
       val isBiometricRequired = SecurityManager.isQuickTileBiometricEnabled(this)
-      if (isBiometricRequired && SecurityManager.isPinConfigured(this)) {
+      if (isGlobalAuthEnabled && isBiometricRequired && SecurityManager.isPinConfigured(this)) {
         isUnlocked = false
         pendingTileAction = true
       } else {
@@ -95,19 +100,23 @@ class MainActivity : FragmentActivity() {
 
   override fun onStop() {
     super.onStop()
-    if (!SecurityManager.isAuthenticating && !SecurityManager.isRequestingPermission && SecurityManager.isPinConfigured(this)) {
+    val isGlobalAuthEnabled = SecurityManager.isGlobalAuthEnabled(this)
+    if (isGlobalAuthEnabled && !SecurityManager.isAuthenticating && !SecurityManager.isRequestingPermission && SecurityManager.isPinConfigured(this)) {
       backgroundTimestamp = System.currentTimeMillis()
     }
   }
 
   override fun onResume() {
     super.onResume()
-    if (backgroundTimestamp > 0L) {
+    val isGlobalAuthEnabled = SecurityManager.isGlobalAuthEnabled(this)
+    if (isGlobalAuthEnabled && backgroundTimestamp > 0L) {
       val elapsed = System.currentTimeMillis() - backgroundTimestamp
       backgroundTimestamp = 0L
       if (elapsed >= LOCK_TIMEOUT_MS && !SecurityManager.isAuthenticating && !SecurityManager.isRequestingPermission && SecurityManager.isPinConfigured(this)) {
         isUnlocked = false
       }
+    } else {
+      backgroundTimestamp = 0L
     }
     parkingViewModel.onAppResume()
   }

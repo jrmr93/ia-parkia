@@ -83,6 +83,7 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                 if (updatedConfig != null) {
                     _uiState.update { it.copy(config = updatedConfig) }
                     com.example.util.SecurityManager.setQuickTileBiometricEnabled(getApplication(), updatedConfig.quickTileBiometricEnabled)
+                    com.example.util.SecurityManager.setGlobalAuthEnabled(getApplication(), updatedConfig.globalSecurityAuthEnabled)
                     recalculateDerivedValues()
                     manageTicker(updatedConfig)
                     com.example.service.ParkiaTileService.updateQuickTileState(getApplication())
@@ -289,7 +290,8 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
         geminiApiKey: String = "",
         geminiModel: String = "gemini-2.0-flash",
         isGeminiEnabled: Boolean = true,
-        quickTileBiometricEnabled: Boolean = true
+        quickTileBiometricEnabled: Boolean = true,
+        globalSecurityAuthEnabled: Boolean = true
     ) {
         viewModelScope.launch {
             repository.updateTariffAndNotifications(
@@ -301,9 +303,11 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                 geminiApiKey = geminiApiKey,
                 geminiModel = geminiModel,
                 isGeminiEnabled = isGeminiEnabled,
-                quickTileBiometricEnabled = quickTileBiometricEnabled
+                quickTileBiometricEnabled = quickTileBiometricEnabled,
+                globalSecurityAuthEnabled = globalSecurityAuthEnabled
             )
             com.example.util.SecurityManager.setQuickTileBiometricEnabled(getApplication(), quickTileBiometricEnabled)
+            com.example.util.SecurityManager.setGlobalAuthEnabled(getApplication(), globalSecurityAuthEnabled)
             if (notifyEnabled) {
                 com.example.service.ParkiaForegroundService.startOrUpdate(getApplication(), forceUpdate = true)
             } else {

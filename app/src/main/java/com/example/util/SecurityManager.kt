@@ -11,12 +11,23 @@ object SecurityManager {
     private const val PREFS_NAME = "parkia_security_prefs"
     private const val KEY_PIN = "security_pin"
     private const val KEY_QUICK_TILE_BIOMETRIC = "quick_tile_biometric_enabled"
+    private const val KEY_GLOBAL_AUTH = "global_security_auth_enabled"
 
     @Volatile
     var isAuthenticating: Boolean = false
 
     @Volatile
     var isRequestingPermission: Boolean = false
+
+    fun isGlobalAuthEnabled(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getBoolean(KEY_GLOBAL_AUTH, true)
+    }
+
+    fun setGlobalAuthEnabled(context: Context, enabled: Boolean) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(KEY_GLOBAL_AUTH, enabled).apply()
+    }
 
     fun isQuickTileBiometricEnabled(context: Context): Boolean {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

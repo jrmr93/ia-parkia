@@ -22,7 +22,8 @@ data class ParkingConfig(
     val customGeminiApiKey: String = "",
     val customGeminiModel: String = "gemini-2.0-flash",
     val isGeminiEnabled: Boolean = true,
-    val quickTileBiometricEnabled: Boolean = true
+    val quickTileBiometricEnabled: Boolean = true,
+    val globalSecurityAuthEnabled: Boolean = true
 )
 
 @Entity(tableName = "parking_history")

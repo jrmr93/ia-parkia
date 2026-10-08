@@ -376,35 +376,73 @@ fun combineTodayWithTime(detectedHour: Int, detectedMinute: Int, detectedSecond:
 
 object VoiceAiParser {
 
+    private val spanishNumberWords = listOf(
+        "cincuenta y cuatro" to 54, "cincuenta y cinco" to 55, "cincuenta y seis" to 56, "cincuenta y siete" to 57, "cincuenta y ocho" to 58, "cincuenta y nueve" to 59,
+        "cincuenta y uno" to 51, "cincuenta y dos" to 52, "cincuenta y tres" to 53,
+        "cuarenta y uno" to 41, "cuarenta y dos" to 42, "cuarenta y tres" to 43, "cuarenta y cuatro" to 44, "cuarenta y cinco" to 45, "cuarenta y seis" to 46, "cuarenta y siete" to 47, "cuarenta y ocho" to 48, "cuarenta y nueve" to 49,
+        "treinta y uno" to 31, "treinta y dos" to 32, "treinta y tres" to 33, "treinta y cuatro" to 34, "treinta y cinco" to 35, "treinta y seis" to 36, "treinta y siete" to 37, "treinta y ocho" to 38, "treinta y nueve" to 39,
+        "sesenta y uno" to 61, "sesenta y dos" to 62, "sesenta y tres" to 63, "sesenta y cuatro" to 64, "sesenta y cinco" to 65, "sesenta y seis" to 66, "sesenta y siete" to 67, "sesenta y ocho" to 68, "sesenta y nueve" to 69,
+        "setenta y uno" to 71, "setenta y dos" to 72, "setenta y tres" to 73, "setenta y cuatro" to 74, "setenta y cinco" to 75, "setenta y seis" to 76, "setenta y siete" to 77, "setenta y ocho" to 78, "setenta y nueve" to 79,
+        "ochenta y uno" to 81, "ochenta y dos" to 82, "ochenta y tres" to 83, "ochenta y cuatro" to 84, "ochenta y cinco" to 85, "ochenta y seis" to 86, "ochenta y siete" to 87, "ochenta y ocho" to 88, "ochenta y nueve" to 89,
+        "noventa y uno" to 91, "noventa y dos" to 92, "noventa y tres" to 93, "noventa y cuatro" to 94, "noventa y cinco" to 95, "noventa y seis" to 96, "noventa y siete" to 97, "noventa y ocho" to 98, "noventa y nueve" to 99,
+        "diecinueve" to 19, "dieciocho" to 18, "diecisiete" to 17, "dieciseis" to 16, "quince" to 15, "catorce" to 14, "trece" to 13, "doce" to 12, "once" to 11, "diez" to 10,
+        "nueve" to 9, "ocho" to 8, "siete" to 7, "seis" to 6, "cinco" to 5, "cuatro" to 4, "tres" to 3, "dos" to 2,
+        "uno" to 1, "una" to 1, "un" to 1, "cero" to 0,
+        "veintiuno" to 21, "veintiun" to 21, "veintidos" to 22, "veintitres" to 23, "veinticuatro" to 24, "veinticinco" to 25, "veintiseis" to 26, "veintisiete" to 27, "veintiocho" to 28, "veintinueve" to 29,
+        "veinte" to 20, "treinta" to 30, "cuarenta" to 40, "cincuenta" to 50, "sesenta" to 60, "setenta" to 70, "ochenta" to 80, "noventa" to 90, "cien" to 100, "ciento" to 100
+    )
+
     fun parseSpeech(rawText: String): AiRecognitionResult {
         var normalized = rawText.lowercase(Locale.getDefault())
-
-        normalized = normalized
-            .replace("veinticinco", "25")
-            .replace("veinte", "20")
-            .replace("quince", "15")
-            .replace("cincuenta", "50")
-            .replace("treinta", "30")
-            .replace("diez", "10")
-            .replace("cinco", "5")
-            .replace("cien", "100")
             .replace("dólares", "dolares")
+            .replace("dólar", "dolar")
+            .replace("centávos", "centavos")
+            .replace("centávo", "centavo")
+            .replace("dieciséis", "dieciseis")
+            .replace("veintidós", "veintidos")
+            .replace("veintitrés", "veintitres")
+            .replace("veintiséis", "veintiseis")
+            .replace("veintiún", "veintiun")
+
+        // Replace number words with numeric digits
+        for ((word, num) in spanishNumberWords) {
+            val regex = Regex("\\b" + Pattern.quote(word) + "\\b")
+            normalized = normalized.replace(regex, num.toString())
+        }
 
         var parsedBalance: Double? = null
 
-        val numberMatches = ArrayList<Double>()
-        val numberPattern = Pattern.compile("(\\d+(?:[\\.,]\\d{1,2})?)")
-        val numberMatcher = numberPattern.matcher(normalized)
-        while (numberMatcher.find()) {
-            val numStr = numberMatcher.group(1)?.replace(",", ".") ?: continue
-            val num = numStr.toDoubleOrNull()
-            if (num != null && num > 0.0 && num < 10000.0) {
-                numberMatches.add(num)
+        // Pattern 1: Spoken dollars and cents: e.g. "1 dolar con 54 centavos", "1 con 54 centavos", "1.54 dolares", "1 punto 54 dolares"
+        val dollarCentPattern = Pattern.compile("(?i)(\\d+)\\s*(?:dolares?|dolar)?\\s*(?:con|punto|coma|\\.)\\s*(\\d+)\\s*(?:centavos?|centavo|dolares?|dolar)?")
+        val dcMatcher = dollarCentPattern.matcher(normalized)
+        if (dcMatcher.find()) {
+            val dStr = dcMatcher.group(1)
+            val cStr = dcMatcher.group(2)
+            val dollars = dStr?.toDoubleOrNull() ?: 0.0
+            val centsRaw = cStr?.toDoubleOrNull() ?: 0.0
+            val centsValue = if (cStr != null && cStr.length == 1 && centsRaw < 10) {
+                centsRaw / 100.0
+            } else {
+                centsRaw / 100.0
             }
+            parsedBalance = dollars + centsValue
         }
 
-        if (numberMatches.isNotEmpty()) {
-            parsedBalance = numberMatches.first()
+        // Pattern 2: Explicit decimal or standalone numbers
+        if (parsedBalance == null) {
+            val numberMatches = ArrayList<Double>()
+            val numberPattern = Pattern.compile("(\\d+(?:[\\.,]\\d{1,2})?)")
+            val numberMatcher = numberPattern.matcher(normalized)
+            while (numberMatcher.find()) {
+                val numStr = numberMatcher.group(1)?.replace(",", ".") ?: continue
+                val num = numStr.toDoubleOrNull()
+                if (num != null && num > 0.0 && num < 10000.0) {
+                    numberMatches.add(num)
+                }
+            }
+            if (numberMatches.isNotEmpty()) {
+                parsedBalance = numberMatches.first()
+            }
         }
 
         return AiRecognitionResult(

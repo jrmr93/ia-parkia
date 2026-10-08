@@ -272,4 +272,35 @@ class ExampleRobolectricTest {
         assertEquals(7, calAM.get(java.util.Calendar.HOUR_OF_DAY))
         assertEquals(49, calAM.get(java.util.Calendar.MINUTE))
     }
+
+    @Test
+    fun `voice ai parser parses natural spoken spanish balance phrases`() {
+        val res1 = com.example.util.VoiceAiParser.parseSpeech("Un dolar con cincuenta y cuatro centavos")
+        assertEquals(1.54, res1.balance!!, 0.001)
+
+        val res2 = com.example.util.VoiceAiParser.parseSpeech("uno punto cincuenta y cuatro dolares")
+        assertEquals(1.54, res2.balance!!, 0.001)
+
+        val res3 = com.example.util.VoiceAiParser.parseSpeech("cinco dolares con cinco centavos")
+        assertEquals(5.05, res3.balance!!, 0.001)
+
+        val res4 = com.example.util.VoiceAiParser.parseSpeech("dos dolares con treinta centavos")
+        assertEquals(2.30, res4.balance!!, 0.001)
+    }
+
+    @Test
+    fun `global security auth switch toggles preference in security manager`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+
+        // Default is true
+        assertTrue(SecurityManager.isGlobalAuthEnabled(context))
+
+        // Disable global auth
+        SecurityManager.setGlobalAuthEnabled(context, false)
+        assertFalse(SecurityManager.isGlobalAuthEnabled(context))
+
+        // Re-enable global auth
+        SecurityManager.setGlobalAuthEnabled(context, true)
+        assertTrue(SecurityManager.isGlobalAuthEnabled(context))
+    }
 }

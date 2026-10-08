@@ -97,7 +97,8 @@ fun ParkingMainScreen(
 
     // Helper for authenticating via PIN/Biometrics before performing sensitive reset actions
     fun authenticateBeforeAction(onSuccess: () -> Unit) {
-        if (activity != null && SecurityManager.isPinConfigured(context)) {
+        val isGlobalAuthEnabled = SecurityManager.isGlobalAuthEnabled(context)
+        if (activity != null && isGlobalAuthEnabled && SecurityManager.isPinConfigured(context)) {
             if (SecurityManager.canAuthenticateBiometrics(context)) {
                 SecurityManager.launchBiometricPrompt(
                     activity = activity,
@@ -256,11 +257,12 @@ fun ParkingMainScreen(
             currentGeminiModel = uiState.config.customGeminiModel,
             isGeminiEnabled = uiState.config.isGeminiEnabled,
             quickTileBiometricEnabled = uiState.config.quickTileBiometricEnabled,
+            globalSecurityAuthEnabled = uiState.config.globalSecurityAuthEnabled,
             onTestGeminiKey = { apiKey, modelName, onResult ->
                 viewModel.testGeminiApiKey(apiKey, modelName, onResult)
             },
             onDismiss = { viewModel.setShowTariffSettingsDialog(false) },
-            onConfirm = { amount, minutes, notifyEnabled, notifyInterval, tileLabel, apiKey, modelName, isGeminiEnabled, quickTileBiometric ->
+            onConfirm = { amount, minutes, notifyEnabled, notifyInterval, tileLabel, apiKey, modelName, isGeminiEnabled, quickTileBiometric, globalAuth ->
                 viewModel.updateTariffAndNotifications(
                     amount = amount,
                     minutes = minutes,
@@ -270,7 +272,8 @@ fun ParkingMainScreen(
                     geminiApiKey = apiKey,
                     geminiModel = modelName,
                     isGeminiEnabled = isGeminiEnabled,
-                    quickTileBiometricEnabled = quickTileBiometric
+                    quickTileBiometricEnabled = quickTileBiometric,
+                    globalSecurityAuthEnabled = globalAuth
                 )
                 viewModel.setShowTariffSettingsDialog(false)
             }
