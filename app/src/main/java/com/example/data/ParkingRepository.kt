@@ -414,7 +414,8 @@ class ParkingRepository(private val dao: ParkingDao) {
         geminiModel: String,
         isGeminiEnabled: Boolean = true,
         quickTileBiometricEnabled: Boolean = true,
-        globalSecurityAuthEnabled: Boolean = true
+        globalSecurityAuthEnabled: Boolean = true,
+        ttsAnnouncementsEnabled: Boolean = true
     ) = withContext(Dispatchers.IO) {
         val config = getOrCreateConfig()
         val cleanLabel = if (tileLabel.isBlank()) "Parkia" else tileLabel.trim()
@@ -429,7 +430,8 @@ class ParkingRepository(private val dao: ParkingDao) {
                 customGeminiModel = if (geminiModel.isBlank()) "gemini-2.0-flash" else geminiModel.trim(),
                 isGeminiEnabled = isGeminiEnabled,
                 quickTileBiometricEnabled = quickTileBiometricEnabled,
-                globalSecurityAuthEnabled = globalSecurityAuthEnabled
+                globalSecurityAuthEnabled = globalSecurityAuthEnabled,
+                ttsAnnouncementsEnabled = ttsAnnouncementsEnabled
             )
         )
     }

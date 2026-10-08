@@ -303,4 +303,15 @@ class ExampleRobolectricTest {
         SecurityManager.setGlobalAuthEnabled(context, true)
         assertTrue(SecurityManager.isGlobalAuthEnabled(context))
     }
+
+    @Test
+    fun `tts manager announces session start and stop without errors`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        com.example.util.TtsManager.announceSessionStart(context, 15.50, enabled = true)
+        com.example.util.TtsManager.announceSessionStop(context, 12.30, enabled = true)
+
+        // Should return silently when disabled
+        com.example.util.TtsManager.announceSessionStart(context, 15.50, enabled = false)
+        com.example.util.TtsManager.announceSessionStop(context, 12.30, enabled = false)
+    }
 }

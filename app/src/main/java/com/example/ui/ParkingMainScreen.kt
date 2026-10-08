@@ -258,11 +258,12 @@ fun ParkingMainScreen(
             isGeminiEnabled = uiState.config.isGeminiEnabled,
             quickTileBiometricEnabled = uiState.config.quickTileBiometricEnabled,
             globalSecurityAuthEnabled = uiState.config.globalSecurityAuthEnabled,
+            ttsAnnouncementsEnabled = uiState.config.ttsAnnouncementsEnabled,
             onTestGeminiKey = { apiKey, modelName, onResult ->
                 viewModel.testGeminiApiKey(apiKey, modelName, onResult)
             },
             onDismiss = { viewModel.setShowTariffSettingsDialog(false) },
-            onConfirm = { amount, minutes, notifyEnabled, notifyInterval, tileLabel, apiKey, modelName, isGeminiEnabled, quickTileBiometric, globalAuth ->
+            onConfirm = { amount, minutes, notifyEnabled, notifyInterval, tileLabel, apiKey, modelName, isGeminiEnabled, quickTileBiometric, globalAuth, ttsAnnounce ->
                 viewModel.updateTariffAndNotifications(
                     amount = amount,
                     minutes = minutes,
@@ -273,7 +274,8 @@ fun ParkingMainScreen(
                     geminiModel = modelName,
                     isGeminiEnabled = isGeminiEnabled,
                     quickTileBiometricEnabled = quickTileBiometric,
-                    globalSecurityAuthEnabled = globalAuth
+                    globalSecurityAuthEnabled = globalAuth,
+                    ttsAnnouncementsEnabled = ttsAnnounce
                 )
                 viewModel.setShowTariffSettingsDialog(false)
             }

@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -228,6 +229,7 @@ fun TariffSettingsDialog(
     isGeminiEnabled: Boolean = true,
     quickTileBiometricEnabled: Boolean = true,
     globalSecurityAuthEnabled: Boolean = true,
+    ttsAnnouncementsEnabled: Boolean = true,
     onTestGeminiKey: ((apiKey: String, modelName: String, onResult: (Boolean, String) -> Unit) -> Unit)? = null,
     onDismiss: () -> Unit,
     onConfirm: (
@@ -240,7 +242,8 @@ fun TariffSettingsDialog(
         geminiModel: String,
         isGeminiEnabled: Boolean,
         quickTileBiometricEnabled: Boolean,
-        globalSecurityAuthEnabled: Boolean
+        globalSecurityAuthEnabled: Boolean,
+        ttsAnnouncementsEnabled: Boolean
     ) -> Unit
 ) {
     var amountText by remember { mutableStateOf(String.format(Locale.US, "%.2f", currentAmount)) }
@@ -253,6 +256,7 @@ fun TariffSettingsDialog(
     var geminiEnabled by remember { mutableStateOf(isGeminiEnabled) }
     var quickTileBiometric by remember { mutableStateOf(quickTileBiometricEnabled) }
     var globalAuthEnabled by remember { mutableStateOf(globalSecurityAuthEnabled) }
+    var ttsAnnouncements by remember { mutableStateOf(ttsAnnouncementsEnabled) }
     var isApiKeyVisible by remember { mutableStateOf(false) }
     var isModelMenuExpanded by remember { mutableStateOf(false) }
     var isTestingKey by remember { mutableStateOf(false) }
@@ -398,6 +402,46 @@ fun TariffSettingsDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("notification_interval_input")
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.VolumeUp,
+                            contentDescription = null,
+                            tint = SlateBlue,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Anuncios de Voz de Sesión",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF334155)
+                            )
+                            Text(
+                                text = if (ttsAnnouncements) "Anuncios de voz activos ('Usted ingresa/termina con...')" else "Anuncios por voz desactivados",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF64748B),
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = ttsAnnouncements,
+                        onCheckedChange = { ttsAnnouncements = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = SlateBlue
+                        ),
+                        modifier = Modifier.testTag("toggle_tts_announcements_switch")
                     )
                 }
 
@@ -847,7 +891,8 @@ fun TariffSettingsDialog(
                             geminiModelSelected.trim(),
                             geminiEnabled,
                             quickTileBiometric,
-                            globalAuthEnabled
+                            globalAuthEnabled,
+                            ttsAnnouncements
                         )
                     }
                 },

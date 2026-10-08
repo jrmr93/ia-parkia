@@ -227,10 +227,13 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
     // Direct Session Controls
     fun startSession() {
         viewModelScope.launch {
+            val configBefore = repository.getOrCreateConfig()
+            val startBalance = configBefore.balance
             val started = repository.startSession()
             if (!started) {
                 _uiState.update { it.copy(showNoFundsToStartAlert = true) }
             } else {
+                com.example.util.TtsManager.announceSessionStart(getApplication(), startBalance, configBefore.ttsAnnouncementsEnabled)
                 recalculateDerivedValues()
                 postRealtimeNotification()
             }
@@ -240,6 +243,8 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
     fun stopSession() {
         viewModelScope.launch {
             repository.stopSession(reason = "Finalizado por usuario")
+            val configAfter = repository.getOrCreateConfig()
+            com.example.util.TtsManager.announceSessionStop(getApplication(), configAfter.balance, configAfter.ttsAnnouncementsEnabled)
             recalculateDerivedValues()
             postRealtimeNotification()
         }
@@ -291,7 +296,8 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
         geminiModel: String = "gemini-2.0-flash",
         isGeminiEnabled: Boolean = true,
         quickTileBiometricEnabled: Boolean = true,
-        globalSecurityAuthEnabled: Boolean = true
+        globalSecurityAuthEnabled: Boolean = true,
+        ttsAnnouncementsEnabled: Boolean = true
     ) {
         viewModelScope.launch {
             repository.updateTariffAndNotifications(
@@ -304,7 +310,8 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                 geminiModel = geminiModel,
                 isGeminiEnabled = isGeminiEnabled,
                 quickTileBiometricEnabled = quickTileBiometricEnabled,
-                globalSecurityAuthEnabled = globalSecurityAuthEnabled
+                globalSecurityAuthEnabled = globalSecurityAuthEnabled,
+                ttsAnnouncementsEnabled = ttsAnnouncementsEnabled
             )
             com.example.util.SecurityManager.setQuickTileBiometricEnabled(getApplication(), quickTileBiometricEnabled)
             com.example.util.SecurityManager.setGlobalAuthEnabled(getApplication(), globalSecurityAuthEnabled)
@@ -433,10 +440,13 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
             if (initialBalance >= 0.0) {
                 repository.setBalance(initialBalance)
             }
+            val configBefore = repository.getOrCreateConfig()
+            val startBalance = configBefore.balance
             val started = repository.startSession(now = timestamp)
             if (!started) {
                 _uiState.update { it.copy(showNoFundsToStartAlert = true) }
             } else {
+                com.example.util.TtsManager.announceSessionStart(getApplication(), startBalance, configBefore.ttsAnnouncementsEnabled)
                 recalculateDerivedValues()
                 postRealtimeNotification()
                 com.example.service.ParkiaTileService.updateQuickTileState(getApplication())
@@ -465,5 +475,10 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
 
     fun formatCurrency(amount: Double): String {
         return String.format(Locale.US, "$%.2f USD", amount)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        com.example.util.TtsManager.shutdown()
     }
 }
