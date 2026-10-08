@@ -1,6 +1,8 @@
 package com.example.ui.components
 
 import android.os.Build
+import android.widget.Toast
+import com.example.util.NotificationHelper
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -547,6 +549,31 @@ fun TariffSettingsDialog(
                             text = "Usar Mi Ubicación Actual (GPS)",
                             color = Color.White,
                             fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            NotificationHelper.showGeofenceNotification(context, isSessionActive = false)
+                            Toast.makeText(context, "Notificación enviada: Simulación de Aproximación", Toast.LENGTH_SHORT).show()
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth().testTag("test_geofence_notification_button")
+                    ) {
+                        Icon(
+                            Icons.Default.Notifications,
+                            contentDescription = null,
+                            tint = SlateBlue,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "🧪 Probar Notificación (Simular Aproximación)",
+                            color = SlateBlue,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
                         )
                     }
 
