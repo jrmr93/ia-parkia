@@ -231,4 +231,45 @@ class ExampleRobolectricTest {
         SecurityManager.setQuickTileBiometricEnabled(context, true)
         assertTrue(SecurityManager.isQuickTileBiometricEnabled(context))
     }
+
+    @Test
+    fun `vision ai parser extracts balance below Efectivo word`() {
+        val rawText = """
+            PARQUEADERO CENTRAL
+            FECHA: 07/10/2026 14:30
+            Efectivo
+            15.50
+        """.trimIndent()
+
+        val result = com.example.util.VisionAiParser.parseExtractedText(rawText)
+        assertNotNull(result.balance)
+        assertEquals(15.50, result.balance!!, 0.001)
+    }
+
+    @Test
+    fun `vision ai parser converts 12h AM PM time to 24h format`() {
+        val rawTextPM = """
+            COMPROBANTE DE PAGO
+            FECHA: 07/10/2026 7:49 PM
+            Efectivo $ 20.00
+        """.trimIndent()
+
+        val resultPM = com.example.util.VisionAiParser.parseExtractedText(rawTextPM)
+        assertNotNull(resultPM.timestamp)
+        val calPM = java.util.Calendar.getInstance().apply { timeInMillis = resultPM.timestamp!! }
+        assertEquals(19, calPM.get(java.util.Calendar.HOUR_OF_DAY))
+        assertEquals(49, calPM.get(java.util.Calendar.MINUTE))
+
+        val rawTextAM = """
+            COMPROBANTE DE PAGO
+            HORA: 7:49 AM
+            SALDO: 10.00
+        """.trimIndent()
+
+        val resultAM = com.example.util.VisionAiParser.parseExtractedText(rawTextAM)
+        assertNotNull(resultAM.timestamp)
+        val calAM = java.util.Calendar.getInstance().apply { timeInMillis = resultAM.timestamp!! }
+        assertEquals(7, calAM.get(java.util.Calendar.HOUR_OF_DAY))
+        assertEquals(49, calAM.get(java.util.Calendar.MINUTE))
+    }
 }

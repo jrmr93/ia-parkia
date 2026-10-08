@@ -423,16 +423,55 @@ object VisionAiParser {
 
         val lines = rawText.split("\n")
 
-        val moneyKeywordRegex = Pattern.compile("(?i)(?:total|saldo|monto|pago|ingreso|val|usd|\\$|s\\/)\\s*[:=]?\\s*(\\d+(?:[\\.,]\\d{1,2})?)")
-        for (line in lines) {
-            val matcher = moneyKeywordRegex.matcher(line)
-            if (matcher.find()) {
-                val amountStr = matcher.group(1)?.replace(",", ".")
-                parsedBalance = amountStr?.toDoubleOrNull()
-                if (parsedBalance != null && parsedBalance > 0.0) break
+        // 1. Priority Balance parsing: Look for "efectivo" and get amount on same line or next lines
+        val efectivoRegex = Pattern.compile("(?i)efectivo")
+        val numberPattern = Pattern.compile("(\\d+(?:[\\.,]\\d{1,2})?)")
+
+        for (i in lines.indices) {
+            val line = lines[i]
+            if (efectivoRegex.matcher(line).find()) {
+                // Check same line after "efectivo"
+                val lineAfterKeyword = line.lowercase(Locale.getDefault()).substringAfter("efectivo")
+                val sameLineMatcher = numberPattern.matcher(lineAfterKeyword)
+                if (sameLineMatcher.find()) {
+                    val amountStr = sameLineMatcher.group(1)?.replace(",", ".")
+                    val candidate = amountStr?.toDoubleOrNull()
+                    if (candidate != null && candidate > 0.0) {
+                        parsedBalance = candidate
+                        break
+                    }
+                }
+                // Check subsequent lines below "Efectivo"
+                for (j in (i + 1)..minOf(i + 3, lines.lastIndex)) {
+                    val nextLine = lines[j]
+                    val nextLineMatcher = numberPattern.matcher(nextLine)
+                    if (nextLineMatcher.find()) {
+                        val amountStr = nextLineMatcher.group(1)?.replace(",", ".")
+                        val candidate = amountStr?.toDoubleOrNull()
+                        if (candidate != null && candidate > 0.0) {
+                            parsedBalance = candidate
+                            break
+                        }
+                    }
+                }
+                if (parsedBalance != null) break
             }
         }
 
+        // 2. Fallback money keyword parsing (total, saldo, monto, etc.)
+        if (parsedBalance == null) {
+            val moneyKeywordRegex = Pattern.compile("(?i)(?:total|saldo|monto|pago|ingreso|val|usd|\\$|s\\/)\\s*[:=]?\\s*(\\d+(?:[\\.,]\\d{1,2})?)")
+            for (line in lines) {
+                val matcher = moneyKeywordRegex.matcher(line)
+                if (matcher.find()) {
+                    val amountStr = matcher.group(1)?.replace(",", ".")
+                    parsedBalance = amountStr?.toDoubleOrNull()
+                    if (parsedBalance != null && parsedBalance > 0.0) break
+                }
+            }
+        }
+
+        // 3. Fallback generic decimal parsing
         if (parsedBalance == null) {
             val genericDecimalPattern = Pattern.compile("(\\d+(?:[\\.,]\\d{1,2})?)")
             for (line in lines) {
@@ -449,19 +488,48 @@ object VisionAiParser {
             }
         }
 
-        val timeRegex = Pattern.compile("(\\d{1,2}[:\\.]\\d{2}(?:[:\\.]\\d{2})?)")
-        for (line in lines) {
-            val matcher = timeRegex.matcher(line)
+        // 4. Extract time with AM/PM 12h to 24h conversion support
+        val time12hRegex = Pattern.compile("(?i)(\\d{1,2})[:\\.](\\d{2})(?:[:\\.]\\d{2})?\\s*(p\\.?\\s*m\\.?|a\\.?\\s*m\\.?|pm|am)?")
+        for (i in lines.indices) {
+            val line = lines[i]
+            val matcher = time12hRegex.matcher(line)
             if (matcher.find()) {
-                val timeStr = matcher.group(1)
-                val parts = timeStr?.replace(".", ":")?.split(":")
-                if (parts != null && parts.size >= 2) {
-                    val hours = parts[0].toIntOrNull() ?: 0
-                    val minutes = parts[1].toIntOrNull() ?: 0
-                    if (hours in 0..23 && minutes in 0..59) {
-                        parsedTimestamp = combineTodayWithTime(hours, minutes)
-                        break
+                val rawHour = matcher.group(1)?.toIntOrNull()
+                val rawMinute = matcher.group(2)?.toIntOrNull()
+                var amPmMarker = matcher.group(3)?.lowercase(Locale.getDefault())?.replace(".", "")?.trim()
+
+                if (rawHour != null && rawMinute != null && rawHour in 0..23 && rawMinute in 0..59) {
+                    if (amPmMarker.isNullOrBlank()) {
+                        val lineLower = line.lowercase(Locale.getDefault())
+                        if (lineLower.contains("pm") || lineLower.contains("p.m.") || lineLower.contains(" p m")) {
+                            amPmMarker = "pm"
+                        } else if (lineLower.contains("am") || lineLower.contains("a.m.") || lineLower.contains(" a m")) {
+                            amPmMarker = "am"
+                        } else if (i + 1 <= lines.lastIndex) {
+                            val nextLower = lines[i + 1].trim().lowercase(Locale.getDefault())
+                            if (nextLower == "pm" || nextLower == "p.m." || nextLower == "pm." || nextLower == "p. m.") {
+                                amPmMarker = "pm"
+                            } else if (nextLower == "am" || nextLower == "a.m." || nextLower == "am." || nextLower == "a. m.") {
+                                amPmMarker = "am"
+                            }
+                        }
                     }
+
+                    var hour24 = rawHour
+                    if (amPmMarker != null) {
+                        if (amPmMarker.contains("pm") || amPmMarker.contains("p")) {
+                            if (hour24 in 1..11) {
+                                hour24 += 12
+                            }
+                        } else if (amPmMarker.contains("am") || amPmMarker.contains("a")) {
+                            if (hour24 == 12) {
+                                hour24 = 0
+                            }
+                        }
+                    }
+
+                    parsedTimestamp = combineTodayWithTime(hour24, rawMinute)
+                    break
                 }
             }
         }
