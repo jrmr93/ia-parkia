@@ -259,11 +259,15 @@ fun ParkingMainScreen(
             quickTileBiometricEnabled = uiState.config.quickTileBiometricEnabled,
             globalSecurityAuthEnabled = uiState.config.globalSecurityAuthEnabled,
             ttsAnnouncementsEnabled = uiState.config.ttsAnnouncementsEnabled,
+            geofenceEnabled = uiState.config.geofenceEnabled,
+            geofenceLatitude = uiState.config.geofenceLatitude,
+            geofenceLongitude = uiState.config.geofenceLongitude,
+            geofenceRadiusMeters = uiState.config.geofenceRadiusMeters,
             onTestGeminiKey = { apiKey, modelName, onResult ->
                 viewModel.testGeminiApiKey(apiKey, modelName, onResult)
             },
             onDismiss = { viewModel.setShowTariffSettingsDialog(false) },
-            onConfirm = { amount, minutes, notifyEnabled, notifyInterval, tileLabel, apiKey, modelName, isGeminiEnabled, quickTileBiometric, globalAuth, ttsAnnounce ->
+            onConfirm = { amount, minutes, notifyEnabled, notifyInterval, tileLabel, apiKey, modelName, isGeminiEnabled, quickTileBiometric, globalAuth, ttsAnnounce, geoEnabled, geoLat, geoLng, geoRad ->
                 viewModel.updateTariffAndNotifications(
                     amount = amount,
                     minutes = minutes,
@@ -275,7 +279,11 @@ fun ParkingMainScreen(
                     isGeminiEnabled = isGeminiEnabled,
                     quickTileBiometricEnabled = quickTileBiometric,
                     globalSecurityAuthEnabled = globalAuth,
-                    ttsAnnouncementsEnabled = ttsAnnounce
+                    ttsAnnouncementsEnabled = ttsAnnounce,
+                    geofenceEnabled = geoEnabled,
+                    geofenceLatitude = geoLat,
+                    geofenceLongitude = geoLng,
+                    geofenceRadiusMeters = geoRad
                 )
                 viewModel.setShowTariffSettingsDialog(false)
             }

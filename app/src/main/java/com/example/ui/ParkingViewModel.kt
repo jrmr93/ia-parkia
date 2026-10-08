@@ -297,7 +297,11 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
         isGeminiEnabled: Boolean = true,
         quickTileBiometricEnabled: Boolean = true,
         globalSecurityAuthEnabled: Boolean = true,
-        ttsAnnouncementsEnabled: Boolean = true
+        ttsAnnouncementsEnabled: Boolean = true,
+        geofenceEnabled: Boolean = false,
+        geofenceLatitude: Double = 0.0,
+        geofenceLongitude: Double = 0.0,
+        geofenceRadiusMeters: Float = 100f
     ) {
         viewModelScope.launch {
             repository.updateTariffAndNotifications(
@@ -311,10 +315,19 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                 isGeminiEnabled = isGeminiEnabled,
                 quickTileBiometricEnabled = quickTileBiometricEnabled,
                 globalSecurityAuthEnabled = globalSecurityAuthEnabled,
-                ttsAnnouncementsEnabled = ttsAnnouncementsEnabled
+                ttsAnnouncementsEnabled = ttsAnnouncementsEnabled,
+                geofenceEnabled = geofenceEnabled,
+                geofenceLatitude = geofenceLatitude,
+                geofenceLongitude = geofenceLongitude,
+                geofenceRadiusMeters = geofenceRadiusMeters
             )
             com.example.util.SecurityManager.setQuickTileBiometricEnabled(getApplication(), quickTileBiometricEnabled)
             com.example.util.SecurityManager.setGlobalAuthEnabled(getApplication(), globalSecurityAuthEnabled)
+            if (geofenceEnabled) {
+                com.example.util.GeofenceManager.registerGeofence(getApplication(), geofenceLatitude, geofenceLongitude, geofenceRadiusMeters)
+            } else {
+                com.example.util.GeofenceManager.removeGeofence(getApplication())
+            }
             if (notifyEnabled) {
                 com.example.service.ParkiaForegroundService.startOrUpdate(getApplication(), forceUpdate = true)
             } else {

@@ -415,7 +415,11 @@ class ParkingRepository(private val dao: ParkingDao) {
         isGeminiEnabled: Boolean = true,
         quickTileBiometricEnabled: Boolean = true,
         globalSecurityAuthEnabled: Boolean = true,
-        ttsAnnouncementsEnabled: Boolean = true
+        ttsAnnouncementsEnabled: Boolean = true,
+        geofenceEnabled: Boolean = false,
+        geofenceLatitude: Double = 0.0,
+        geofenceLongitude: Double = 0.0,
+        geofenceRadiusMeters: Float = 100f
     ) = withContext(Dispatchers.IO) {
         val config = getOrCreateConfig()
         val cleanLabel = if (tileLabel.isBlank()) "Parkia" else tileLabel.trim()
@@ -431,7 +435,11 @@ class ParkingRepository(private val dao: ParkingDao) {
                 isGeminiEnabled = isGeminiEnabled,
                 quickTileBiometricEnabled = quickTileBiometricEnabled,
                 globalSecurityAuthEnabled = globalSecurityAuthEnabled,
-                ttsAnnouncementsEnabled = ttsAnnouncementsEnabled
+                ttsAnnouncementsEnabled = ttsAnnouncementsEnabled,
+                geofenceEnabled = geofenceEnabled,
+                geofenceLatitude = geofenceLatitude,
+                geofenceLongitude = geofenceLongitude,
+                geofenceRadiusMeters = geofenceRadiusMeters
             )
         )
     }

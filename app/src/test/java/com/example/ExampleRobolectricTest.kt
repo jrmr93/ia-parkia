@@ -314,4 +314,37 @@ class ExampleRobolectricTest {
         com.example.util.TtsManager.announceSessionStart(context, 15.50, enabled = false)
         com.example.util.TtsManager.announceSessionStop(context, 12.30, enabled = false)
     }
+
+    @Test
+    fun `geofence notification displays and saves settings correctly`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        repository.updateTariffAndNotifications(
+            amount = 0.10,
+            minutes = 30,
+            notifyEnabled = true,
+            notifyInterval = 1,
+            tileLabel = "Parkia",
+            geminiApiKey = "",
+            geminiModel = "gemini-2.0-flash",
+            isGeminiEnabled = true,
+            quickTileBiometricEnabled = true,
+            globalSecurityAuthEnabled = true,
+            ttsAnnouncementsEnabled = true,
+            geofenceEnabled = true,
+            geofenceLatitude = -0.180653,
+            geofenceLongitude = -78.467838,
+            geofenceRadiusMeters = 150f
+        )
+
+        val config = repository.configFlow.first()
+        assertNotNull(config)
+        assertTrue(config!!.geofenceEnabled)
+        assertEquals(-0.180653, config.geofenceLatitude, 0.0001)
+        assertEquals(-78.467838, config.geofenceLongitude, 0.0001)
+        assertEquals(150f, config.geofenceRadiusMeters, 0.1f)
+
+        // Show geofence notification without throwing exception
+        NotificationHelper.showGeofenceNotification(context, isSessionActive = false)
+        NotificationHelper.showGeofenceNotification(context, isSessionActive = true)
+    }
 }

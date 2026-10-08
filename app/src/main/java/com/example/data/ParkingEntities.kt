@@ -24,7 +24,11 @@ data class ParkingConfig(
     val isGeminiEnabled: Boolean = true,
     val quickTileBiometricEnabled: Boolean = true,
     val globalSecurityAuthEnabled: Boolean = true,
-    val ttsAnnouncementsEnabled: Boolean = true
+    val ttsAnnouncementsEnabled: Boolean = true,
+    val geofenceEnabled: Boolean = false,
+    val geofenceLatitude: Double = 0.0,
+    val geofenceLongitude: Double = 0.0,
+    val geofenceRadiusMeters: Float = 100f
 )
 
 @Entity(tableName = "parking_history")

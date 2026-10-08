@@ -25,6 +25,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Pin
 import androidx.compose.material.icons.filled.RestartAlt
@@ -230,6 +232,10 @@ fun TariffSettingsDialog(
     quickTileBiometricEnabled: Boolean = true,
     globalSecurityAuthEnabled: Boolean = true,
     ttsAnnouncementsEnabled: Boolean = true,
+    geofenceEnabled: Boolean = false,
+    geofenceLatitude: Double = 0.0,
+    geofenceLongitude: Double = 0.0,
+    geofenceRadiusMeters: Float = 100f,
     onTestGeminiKey: ((apiKey: String, modelName: String, onResult: (Boolean, String) -> Unit) -> Unit)? = null,
     onDismiss: () -> Unit,
     onConfirm: (
@@ -243,7 +249,11 @@ fun TariffSettingsDialog(
         isGeminiEnabled: Boolean,
         quickTileBiometricEnabled: Boolean,
         globalSecurityAuthEnabled: Boolean,
-        ttsAnnouncementsEnabled: Boolean
+        ttsAnnouncementsEnabled: Boolean,
+        geofenceEnabled: Boolean,
+        geofenceLatitude: Double,
+        geofenceLongitude: Double,
+        geofenceRadiusMeters: Float
     ) -> Unit
 ) {
     var amountText by remember { mutableStateOf(String.format(Locale.US, "%.2f", currentAmount)) }
@@ -257,6 +267,11 @@ fun TariffSettingsDialog(
     var quickTileBiometric by remember { mutableStateOf(quickTileBiometricEnabled) }
     var globalAuthEnabled by remember { mutableStateOf(globalSecurityAuthEnabled) }
     var ttsAnnouncements by remember { mutableStateOf(ttsAnnouncementsEnabled) }
+    var isGeofenceActive by remember { mutableStateOf(geofenceEnabled) }
+    var latitudeText by remember { mutableStateOf(if (geofenceLatitude != 0.0) geofenceLatitude.toString() else "") }
+    var longitudeText by remember { mutableStateOf(if (geofenceLongitude != 0.0) geofenceLongitude.toString() else "") }
+    var radiusText by remember { mutableStateOf(geofenceRadiusMeters.toInt().toString()) }
+    var showMapPicker by remember { mutableStateOf(false) }
     var isApiKeyVisible by remember { mutableStateOf(false) }
     var isModelMenuExpanded by remember { mutableStateOf(false) }
     var isTestingKey by remember { mutableStateOf(false) }
@@ -290,7 +305,25 @@ fun TariffSettingsDialog(
         QuickTileInstructionsDialog(onDismiss = { showQuickTileInstructions = false })
     }
 
-    AlertDialog(
+    if (showMapPicker) {
+        val currentLat = latitudeText.toDoubleOrNull() ?: 0.0
+        val currentLng = longitudeText.toDoubleOrNull() ?: 0.0
+        val currentRad = radiusText.toFloatOrNull() ?: 100f
+
+        GeofenceMapPickerModal(
+            initialLatitude = currentLat,
+            initialLongitude = currentLng,
+            initialRadiusMeters = currentRad,
+            onDismiss = { showMapPicker = false },
+            onConfirm = { lat, lng, rad ->
+                latitudeText = String.format(Locale.US, "%.6f", lat)
+                longitudeText = String.format(Locale.US, "%.6f", lng)
+                radiusText = rad.toInt().toString()
+                showMapPicker = false
+            }
+        )
+    } else {
+        AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Color.White,
         icon = {
@@ -443,6 +476,138 @@ fun TariffSettingsDialog(
                         ),
                         modifier = Modifier.testTag("toggle_tts_announcements_switch")
                     )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFF1F5F9), RoundedCornerShape(12.dp))
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Icon(
+                            Icons.Default.Notifications,
+                            contentDescription = null,
+                            tint = SlateBlue,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Detección por Geocerca (Ubicación)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF334155)
+                            )
+                            Text(
+                                text = if (isGeofenceActive) "Notifica automáticamente al aproximarte" else "Detección por ubicación desactivada",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF64748B),
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = isGeofenceActive,
+                        onCheckedChange = { isGeofenceActive = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = SlateBlue
+                        ),
+                        modifier = Modifier.testTag("toggle_geofence_switch")
+                    )
+                }
+
+                if (isGeofenceActive) {
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Button(
+                        onClick = {
+                            getBestDeviceLocation(context) { lat, lng ->
+                                latitudeText = String.format(Locale.US, "%.6f", lat)
+                                longitudeText = String.format(Locale.US, "%.6f", lng)
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = SlateBlue),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth().testTag("use_current_gps_button")
+                    ) {
+                        Icon(
+                            Icons.Default.MyLocation,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Usar Mi Ubicación Actual (GPS)",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = latitudeText,
+                            onValueChange = { latitudeText = it },
+                            label = { Text("Latitud") },
+                            placeholder = { Text("Ej. -0.180653") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                            modifier = Modifier.weight(1f).testTag("geofence_latitude_input")
+                        )
+                        OutlinedTextField(
+                            value = longitudeText,
+                            onValueChange = { longitudeText = it },
+                            label = { Text("Longitud") },
+                            placeholder = { Text("Ej. -78.467838") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                            modifier = Modifier.weight(1f).testTag("geofence_longitude_input")
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = radiusText,
+                        onValueChange = { radiusText = it },
+                        label = { Text("Radio de Cobertura (Metros)") },
+                        placeholder = { Text("100") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth().testTag("geofence_radius_input")
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        onClick = { showMapPicker = true },
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.5.dp, SlateBlue),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("open_geofence_map_button")
+                    ) {
+                        Icon(
+                            Icons.Default.LocationOn,
+                            contentDescription = null,
+                            tint = SlateBlue,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Abrir Mapa Interactivo en Pantalla Completa",
+                            color = SlateBlue,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -881,6 +1046,10 @@ fun TariffSettingsDialog(
                     } else if (notifyEnabled && (interval == null || interval <= 0)) {
                         errorMessage = "Ingresa un intervalo de notificación válido mayor a 0 min."
                     } else {
+                        val latVal = latitudeText.toDoubleOrNull() ?: 0.0
+                        val lngVal = longitudeText.toDoubleOrNull() ?: 0.0
+                        val radVal = radiusText.toFloatOrNull() ?: 100f
+
                         onConfirm(
                             amount,
                             minutes,
@@ -892,7 +1061,11 @@ fun TariffSettingsDialog(
                             geminiEnabled,
                             quickTileBiometric,
                             globalAuthEnabled,
-                            ttsAnnouncements
+                            ttsAnnouncements,
+                            isGeofenceActive,
+                            latVal,
+                            lngVal,
+                            radVal
                         )
                     }
                 },
@@ -911,6 +1084,7 @@ fun TariffSettingsDialog(
             }
         }
     )
+    }
 }
 
 /**
