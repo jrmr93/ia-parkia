@@ -263,12 +263,22 @@ fun ParkingMainScreen(
             geofenceLatitude = uiState.config.geofenceLatitude,
             geofenceLongitude = uiState.config.geofenceLongitude,
             geofenceRadiusMeters = uiState.config.geofenceRadiusMeters,
+            registeredNfcTagId = uiState.config.registeredNfcTagId,
+            nfcStrictMatchingEnabled = uiState.config.nfcStrictMatchingEnabled,
+            isScanningNfc = uiState.isScanningNfcForRegistration,
+            scannedNfcTagId = uiState.scannedNfcTagId,
+            onStartNfcScan = { viewModel.setIsScanningNfcForRegistration(true) },
+            onStopNfcScan = { viewModel.setIsScanningNfcForRegistration(false) },
+            onClearNfcTag = { viewModel.clearScannedNfcTagId() },
             isSessionActive = uiState.config.isSessionActive,
             onTestGeminiKey = { apiKey, modelName, onResult ->
                 viewModel.testGeminiApiKey(apiKey, modelName, onResult)
             },
-            onDismiss = { viewModel.setShowTariffSettingsDialog(false) },
-            onConfirm = { amount, minutes, notifyEnabled, notifyInterval, tileLabel, apiKey, modelName, isGeminiEnabled, quickTileBiometric, globalAuth, ttsAnnounce, geoEnabled, geoLat, geoLng, geoRad ->
+            onDismiss = {
+                viewModel.setIsScanningNfcForRegistration(false)
+                viewModel.setShowTariffSettingsDialog(false)
+            },
+            onConfirm = { amount, minutes, notifyEnabled, notifyInterval, tileLabel, apiKey, modelName, isGeminiEnabled, quickTileBiometric, globalAuth, ttsAnnounce, geoEnabled, geoLat, geoLng, geoRad, regNfcTagId, nfcStrict ->
                 viewModel.updateTariffAndNotifications(
                     amount = amount,
                     minutes = minutes,
@@ -284,8 +294,11 @@ fun ParkingMainScreen(
                     geofenceEnabled = geoEnabled,
                     geofenceLatitude = geoLat,
                     geofenceLongitude = geoLng,
-                    geofenceRadiusMeters = geoRad
+                    geofenceRadiusMeters = geoRad,
+                    registeredNfcTagId = regNfcTagId,
+                    nfcStrictMatchingEnabled = nfcStrict
                 )
+                viewModel.setIsScanningNfcForRegistration(false)
                 viewModel.setShowTariffSettingsDialog(false)
             }
         )

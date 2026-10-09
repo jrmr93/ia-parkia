@@ -23,6 +23,14 @@ class BootReceiver : BroadcastReceiver() {
                     if (config.notificationsEnabled) {
                         ParkiaForegroundService.startOrUpdate(context.applicationContext)
                     }
+                    if (config.geofenceEnabled) {
+                        com.example.util.GeofenceManager.registerGeofence(
+                            context.applicationContext,
+                            config.geofenceLatitude,
+                            config.geofenceLongitude,
+                            config.geofenceRadiusMeters
+                        )
+                    }
                 } finally {
                     pendingResult.finish()
                 }

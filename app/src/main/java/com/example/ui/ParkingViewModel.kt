@@ -44,7 +44,9 @@ data class ParkingUiState(
     val voiceAiResult: com.example.util.AiRecognitionResult? = null,
     val visionAiResult: com.example.util.AiRecognitionResult? = null,
     val capturedBitmap: android.graphics.Bitmap? = null,
-    val isAiProcessing: Boolean = false
+    val isAiProcessing: Boolean = false,
+    val isScanningNfcForRegistration: Boolean = false,
+    val scannedNfcTagId: String? = null
 )
 
 class ParkingViewModel(application: Application) : AndroidViewModel(application) {
@@ -250,6 +252,69 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    /**
+     * Toggles session state when an NFC tag is detected.
+     * Validates registered tag if strict matching is enabled.
+     */
+    fun toggleSessionFromNfc(scannedTagId: String? = null, onFeedback: (isStarted: Boolean, message: String) -> Unit) {
+        viewModelScope.launch {
+            val configBefore = repository.getOrCreateConfig()
+
+            // Check strict NFC tag matching if enabled
+            if (configBefore.nfcStrictMatchingEnabled && configBefore.registeredNfcTagId.isNotBlank()) {
+                val registered = configBefore.registeredNfcTagId.trim()
+                if (scannedTagId.isNullOrBlank() || !scannedTagId.equals(registered, ignoreCase = true)) {
+                    val tagMsg = if (scannedTagId.isNullOrBlank()) "Tag desconocido" else "ID: $scannedTagId"
+                    onFeedback(false, "Tarjeta NFC no autorizada ($tagMsg)")
+                    return@launch
+                }
+            }
+
+            if (configBefore.isSessionActive) {
+                repository.stopSession(reason = "Finalizado por tag NFC")
+                val configAfter = repository.getOrCreateConfig()
+                com.example.util.TtsManager.announceSessionStop(getApplication(), configAfter.balance, configAfter.ttsAnnouncementsEnabled)
+                recalculateDerivedValues()
+                postRealtimeNotification()
+                onFeedback(false, "Sesión finalizada mediante NFC")
+            } else {
+                if (configBefore.balance < configBefore.rateAmount || configBefore.rateAmount <= 0.0) {
+                    _uiState.update { it.copy(showNoFundsToStartAlert = true) }
+                    onFeedback(false, "Saldo insuficiente para iniciar sesión")
+                } else {
+                    val startBalance = configBefore.balance
+                    val started = repository.startSession()
+                    if (!started) {
+                        _uiState.update { it.copy(showNoFundsToStartAlert = true) }
+                        onFeedback(false, "No se pudo iniciar la sesión")
+                    } else {
+                        com.example.util.TtsManager.announceSessionStart(getApplication(), startBalance, configBefore.ttsAnnouncementsEnabled)
+                        recalculateDerivedValues()
+                        postRealtimeNotification()
+                        onFeedback(true, "¡Sesión iniciada por NFC!")
+                    }
+                }
+            }
+        }
+    }
+
+    fun setIsScanningNfcForRegistration(isScanning: Boolean) {
+        _uiState.update { it.copy(isScanningNfcForRegistration = isScanning) }
+    }
+
+    fun onNfcTagScannedForRegistration(tagId: String) {
+        _uiState.update {
+            it.copy(
+                isScanningNfcForRegistration = false,
+                scannedNfcTagId = tagId
+            )
+        }
+    }
+
+    fun clearScannedNfcTagId() {
+        _uiState.update { it.copy(scannedNfcTagId = null) }
+    }
+
     fun updateActiveSession(newStartTimestamp: Long, newInitialBalance: Double) {
         viewModelScope.launch {
             val depleted = repository.updateActiveSession(newStartTimestamp, newInitialBalance)
@@ -301,7 +366,9 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
         geofenceEnabled: Boolean = false,
         geofenceLatitude: Double = 0.0,
         geofenceLongitude: Double = 0.0,
-        geofenceRadiusMeters: Float = 100f
+        geofenceRadiusMeters: Float = 100f,
+        registeredNfcTagId: String = "",
+        nfcStrictMatchingEnabled: Boolean = false
     ) {
         viewModelScope.launch {
             repository.updateTariffAndNotifications(
@@ -319,7 +386,9 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                 geofenceEnabled = geofenceEnabled,
                 geofenceLatitude = geofenceLatitude,
                 geofenceLongitude = geofenceLongitude,
-                geofenceRadiusMeters = geofenceRadiusMeters
+                geofenceRadiusMeters = geofenceRadiusMeters,
+                registeredNfcTagId = registeredNfcTagId,
+                nfcStrictMatchingEnabled = nfcStrictMatchingEnabled
             )
             com.example.util.SecurityManager.setQuickTileBiometricEnabled(getApplication(), quickTileBiometricEnabled)
             com.example.util.SecurityManager.setGlobalAuthEnabled(getApplication(), globalSecurityAuthEnabled)

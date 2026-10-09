@@ -28,7 +28,9 @@ data class ParkingConfig(
     val geofenceEnabled: Boolean = false,
     val geofenceLatitude: Double = 0.0,
     val geofenceLongitude: Double = 0.0,
-    val geofenceRadiusMeters: Float = 100f
+    val geofenceRadiusMeters: Float = 100f,
+    val registeredNfcTagId: String = "",
+    val nfcStrictMatchingEnabled: Boolean = false
 )
 
 @Entity(tableName = "parking_history")

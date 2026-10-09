@@ -120,10 +120,13 @@ object NotificationHelper {
 
         val appIntent = android.content.Intent(context, com.example.MainActivity::class.java).apply {
             flags = android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+            if (!isSessionActive) {
+                putExtra("EXTRA_SHOW_START_OPTIONS_MODAL", true)
+            }
         }
         val appPendingIntent = android.app.PendingIntent.getActivity(
             context,
-            0,
+            GEOFENCE_NOTIFICATION_ID,
             appIntent,
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )

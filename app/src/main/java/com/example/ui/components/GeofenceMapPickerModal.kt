@@ -15,6 +15,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -183,13 +184,12 @@ fun NativeOpenStreetMap(
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current.density
+    var zoomFloat by remember { mutableFloatStateOf(17f) }
     var zoom by remember { mutableIntStateOf(17) }
     var containerSize by remember { mutableStateOf(IntSize.Zero) }
 
     val lat = if (latitude != 0.0) latitude else -0.180653
     val lng = if (longitude != 0.0) longitude else -78.467838
-
-    val tileDpVal = (256f / density)
 
     Box(
         modifier = modifier
@@ -219,20 +219,32 @@ fun NativeOpenStreetMap(
                     }
                 }
             }
-            .pointerInput(lat, lng, zoom, containerSize, density) {
-                detectDragGestures { change, dragAmount ->
-                    change.consume()
+            .pointerInput(lat, lng, zoomFloat, containerSize, density) {
+                detectTransformGestures { _, pan, gestureZoom, _ ->
                     if (containerSize.width > 0 && containerSize.height > 0) {
-                        val cx = lonToTileX(lng, zoom)
-                        val cy = latToTileY(lat, zoom)
+                        if (gestureZoom != 1.0f) {
+                            val newZoomFloat = (zoomFloat * gestureZoom).coerceIn(10f, 22f)
+                            zoomFloat = newZoomFloat
+                            zoom = newZoomFloat.toInt().coerceIn(10, 22)
+                        }
 
-                        val newCx = cx - (dragAmount.x / 256.0)
-                        val newCy = cy - (dragAmount.y / 256.0)
+                        if (pan.x != 0f || pan.y != 0f) {
+                            val currentZoom = zoom
+                            val effectiveTileZoom = minOf(currentZoom, 19)
+                            val scaleFactor = 1 shl (currentZoom - effectiveTileZoom)
+                            val tileSizePx = 256.0 * scaleFactor
 
-                        val nLng = tileXToLon(newCx, zoom)
-                        val nLat = tileYToLat(newCy, zoom)
+                            val cx = lonToTileX(lng, currentZoom)
+                            val cy = latToTileY(lat, currentZoom)
 
-                        onLocationChange(nLat, nLng)
+                            val newCx = cx - (pan.x / tileSizePx)
+                            val newCy = cy - (pan.y / tileSizePx)
+
+                            val nLng = tileXToLon(newCx, currentZoom)
+                            val nLat = tileYToLat(newCy, currentZoom)
+
+                            onLocationChange(nLat, nLng)
+                        }
                     }
                 }
             }
@@ -241,13 +253,17 @@ fun NativeOpenStreetMap(
             val centerXDp = (containerSize.width / 2f) / density
             val centerYDp = (containerSize.height / 2f) / density
 
-            val cx = lonToTileX(lng, zoom)
-            val cy = latToTileY(lat, zoom)
+            val effectiveTileZoom = minOf(zoom, 19)
+            val scaleFactor = 1 shl (zoom - effectiveTileZoom)
+            val tileDpVal = (256f / density) * scaleFactor
+
+            val cx = lonToTileX(lng, effectiveTileZoom)
+            val cy = latToTileY(lat, effectiveTileZoom)
 
             val centerTileX = floor(cx).toInt()
             val centerTileY = floor(cy).toInt()
 
-            val maxTiles = 1 shl zoom
+            val maxTiles = 1 shl effectiveTileZoom
             val subdomains = arrayOf("a", "b", "c")
 
             for (dx in -3..3) {
@@ -260,7 +276,7 @@ fun NativeOpenStreetMap(
                         val topDp = (centerYDp + (centerTileY + dy - cy) * tileDpVal).dp
 
                         val sub = subdomains[Math.abs(tileX + tileY) % 3]
-                        val tileUrl = "https://$sub.tile.openstreetmap.org/$zoom/$tileX/$tileY.png"
+                        val tileUrl = "https://$sub.tile.openstreetmap.org/$effectiveTileZoom/$tileX/$tileY.png"
 
                         AsyncImage(
                             model = ImageRequest.Builder(context)
@@ -283,7 +299,7 @@ fun NativeOpenStreetMap(
                 val centerY = size.height / 2f
                 val latRad = Math.toRadians(lat)
                 val metersPerPixel = (156543.03392 * cos(latRad)) / (1 shl zoom)
-                val radiusPx = (radiusMeters / metersPerPixel).toFloat().coerceIn(20f, size.width / 1.5f)
+                val radiusPx = (radiusMeters / metersPerPixel).toFloat().coerceIn(5f, size.width * 2f)
 
                 drawCircle(
                     color = Color(0x334F46E5),
@@ -323,7 +339,7 @@ fun NativeOpenStreetMap(
             )
         }
 
-        // Map Zoom Controls & Badge (Max Zoom Level 19 for OpenStreetMap tiles)
+        // Map Zoom Controls & Badge (Max Zoom Level 22)
         Column(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -336,7 +352,12 @@ fun NativeOpenStreetMap(
                 shadowElevation = 4.dp
             ) {
                 IconButton(
-                    onClick = { if (zoom < 19) zoom += 1 },
+                    onClick = {
+                        if (zoom < 22) {
+                            zoomFloat += 1f
+                            zoom = zoomFloat.toInt().coerceIn(10, 22)
+                        }
+                    },
                     modifier = Modifier.size(36.dp)
                 ) {
                     Icon(Icons.Default.Add, contentDescription = "Zoom in", tint = Color(0xFF1E293B))
@@ -349,7 +370,12 @@ fun NativeOpenStreetMap(
                 shadowElevation = 4.dp
             ) {
                 IconButton(
-                    onClick = { if (zoom > 12) zoom -= 1 },
+                    onClick = {
+                        if (zoom > 10) {
+                            zoomFloat -= 1f
+                            zoom = zoomFloat.toInt().coerceIn(10, 22)
+                        }
+                    },
                     modifier = Modifier.size(36.dp)
                 ) {
                     Icon(Icons.Default.Remove, contentDescription = "Zoom out", tint = Color(0xFF1E293B))
@@ -365,7 +391,7 @@ fun NativeOpenStreetMap(
             color = Color(0xCC0F172A)
         ) {
             Text(
-                text = "OpenStreetMap • Zoom $zoom (Máx 19)",
+                text = "OpenStreetMap • Zoom $zoom (Máx 22)",
                 color = Color.White,
                 fontSize = 10.sp,
                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
@@ -493,7 +519,7 @@ fun GeofenceInteractiveMapCard(
                     fontSize = 10.sp,
                     color = Color(0xFF64748B)
                 )
-                listOf(50f, 100f, 200f, 500f, 1000f).forEach { preset ->
+                listOf(5f, 25f, 50f, 100f, 200f, 500f, 1000f).forEach { preset ->
                     val isSelected = (radiusMeters == preset)
                     Surface(
                         shape = RoundedCornerShape(10.dp),
@@ -540,8 +566,7 @@ fun GeofenceInteractiveMapCard(
             Slider(
                 value = radiusMeters,
                 onValueChange = { onRadiusChange(it) },
-                valueRange = 50f..1000f,
-                steps = 18,
+                valueRange = 5f..1000f,
                 colors = SliderDefaults.colors(
                     thumbColor = Color(0xFF4F46E5),
                     activeTrackColor = Color(0xFF4F46E5)

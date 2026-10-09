@@ -419,7 +419,9 @@ class ParkingRepository(private val dao: ParkingDao) {
         geofenceEnabled: Boolean = false,
         geofenceLatitude: Double = 0.0,
         geofenceLongitude: Double = 0.0,
-        geofenceRadiusMeters: Float = 100f
+        geofenceRadiusMeters: Float = 100f,
+        registeredNfcTagId: String = "",
+        nfcStrictMatchingEnabled: Boolean = false
     ) = withContext(Dispatchers.IO) {
         val config = getOrCreateConfig()
         val cleanLabel = if (tileLabel.isBlank()) "Parkia" else tileLabel.trim()
@@ -439,7 +441,9 @@ class ParkingRepository(private val dao: ParkingDao) {
                 geofenceEnabled = geofenceEnabled,
                 geofenceLatitude = geofenceLatitude,
                 geofenceLongitude = geofenceLongitude,
-                geofenceRadiusMeters = geofenceRadiusMeters
+                geofenceRadiusMeters = geofenceRadiusMeters,
+                registeredNfcTagId = registeredNfcTagId.trim(),
+                nfcStrictMatchingEnabled = nfcStrictMatchingEnabled
             )
         )
     }

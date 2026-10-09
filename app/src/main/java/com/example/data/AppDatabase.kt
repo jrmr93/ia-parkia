@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [ParkingConfig::class, ParkingHistoryItem::class],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

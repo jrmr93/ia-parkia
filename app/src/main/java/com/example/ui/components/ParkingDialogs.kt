@@ -44,6 +44,9 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Nfc
+import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -238,6 +241,13 @@ fun TariffSettingsDialog(
     geofenceLatitude: Double = 0.0,
     geofenceLongitude: Double = 0.0,
     geofenceRadiusMeters: Float = 100f,
+    registeredNfcTagId: String = "",
+    nfcStrictMatchingEnabled: Boolean = false,
+    isScanningNfc: Boolean = false,
+    scannedNfcTagId: String? = null,
+    onStartNfcScan: () -> Unit = {},
+    onStopNfcScan: () -> Unit = {},
+    onClearNfcTag: () -> Unit = {},
     isSessionActive: Boolean = false,
     onTestGeminiKey: ((apiKey: String, modelName: String, onResult: (Boolean, String) -> Unit) -> Unit)? = null,
     onDismiss: () -> Unit,
@@ -256,7 +266,9 @@ fun TariffSettingsDialog(
         geofenceEnabled: Boolean,
         geofenceLatitude: Double,
         geofenceLongitude: Double,
-        geofenceRadiusMeters: Float
+        geofenceRadiusMeters: Float,
+        registeredNfcTagId: String,
+        nfcStrictMatchingEnabled: Boolean
     ) -> Unit
 ) {
     var amountText by remember { mutableStateOf(String.format(Locale.US, "%.2f", currentAmount)) }
@@ -274,6 +286,14 @@ fun TariffSettingsDialog(
     var latitudeText by remember { mutableStateOf(if (geofenceLatitude != 0.0) geofenceLatitude.toString() else "") }
     var longitudeText by remember { mutableStateOf(if (geofenceLongitude != 0.0) geofenceLongitude.toString() else "") }
     var radiusText by remember { mutableStateOf(geofenceRadiusMeters.toInt().toString()) }
+    var nfcTagIdText by remember { mutableStateOf(registeredNfcTagId) }
+    var nfcStrictMatching by remember { mutableStateOf(nfcStrictMatchingEnabled) }
+
+    androidx.compose.runtime.LaunchedEffect(scannedNfcTagId) {
+        if (!scannedNfcTagId.isNullOrBlank()) {
+            nfcTagIdText = scannedNfcTagId
+        }
+    }
     var showMapPicker by remember { mutableStateOf(false) }
     var isApiKeyVisible by remember { mutableStateOf(false) }
     var isModelMenuExpanded by remember { mutableStateOf(false) }
@@ -285,6 +305,33 @@ fun TariffSettingsDialog(
     var showChangePinModal by remember { mutableStateOf(false) }
     var showQuickTileInstructions by remember { mutableStateOf(false) }
     val context = LocalContext.current
+
+    val geofenceBgPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (!isGranted) {
+            Toast.makeText(
+                context,
+                "Importante: Para detectar la ubicación con la app cerrada o eliminada, selecciona 'Permitir todo el tiempo' en permisos de ubicación.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    val geofenceLocationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val granted = permissions.values.any { it }
+        if (granted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val bgPerm = androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.ACCESS_BACKGROUND_LOCATION
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!bgPerm) {
+                geofenceBgPermissionLauncher.launch(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            }
+        }
+    }
 
     val modelOptions = remember {
         listOf(
@@ -483,6 +530,121 @@ fun TariffSettingsDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFF1F5F9), RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(
+                                Icons.Default.Nfc,
+                                contentDescription = null,
+                                tint = SlateBlue,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Tarjeta NFC de Control",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF334155)
+                                )
+                                Text(
+                                    text = if (nfcTagIdText.isNotBlank()) "ID Registrado: $nfcTagIdText" else "Sin tarjeta NFC vinculada",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (nfcTagIdText.isNotBlank()) SlateBlue else Color(0xFF64748B),
+                                    fontSize = 11.sp,
+                                    fontWeight = if (nfcTagIdText.isNotBlank()) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+
+                    if (isScanningNfc) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "📡 Acerca tu tarjeta NFC al teléfono...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFD97706),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                if (isScanningNfc) {
+                                    onStopNfcScan()
+                                } else {
+                                    onStartNfcScan()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isScanningNfc) Color(0xFFD97706) else SlateBlue
+                            ),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Nfc, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(if (isScanningNfc) "Cancelar" else "Escanear Tarjeta", fontSize = 12.sp)
+                        }
+
+                        if (nfcTagIdText.isNotBlank()) {
+                            OutlinedButton(
+                                onClick = {
+                                    nfcTagIdText = ""
+                                    onClearNfcTag()
+                                }
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = null, tint = Color.Red, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Solo permitir esta tarjeta",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF334155)
+                            )
+                            Text(
+                                text = if (nfcStrictMatching) "Solo esta tarjeta iniciará/cerrará sesión" else "Cualquier tarjeta NFC funcionará",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF64748B),
+                                fontSize = 10.sp
+                            )
+                        }
+                        Switch(
+                            checked = nfcStrictMatching,
+                            onCheckedChange = { nfcStrictMatching = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = SlateBlue
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -516,7 +678,31 @@ fun TariffSettingsDialog(
                     }
                     Switch(
                         checked = isGeofenceActive,
-                        onCheckedChange = { isGeofenceActive = it },
+                        onCheckedChange = { checked ->
+                            isGeofenceActive = checked
+                            if (checked) {
+                                val finePerm = androidx.core.content.ContextCompat.checkSelfPermission(
+                                    context,
+                                    android.Manifest.permission.ACCESS_FINE_LOCATION
+                                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                if (!finePerm) {
+                                    geofenceLocationPermissionLauncher.launch(
+                                        arrayOf(
+                                            android.Manifest.permission.ACCESS_FINE_LOCATION,
+                                            android.Manifest.permission.ACCESS_COARSE_LOCATION
+                                        )
+                                    )
+                                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                    val bgPerm = androidx.core.content.ContextCompat.checkSelfPermission(
+                                        context,
+                                        android.Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                    if (!bgPerm) {
+                                        geofenceBgPermissionLauncher.launch(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                                    }
+                                }
+                            }
+                        },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color.White,
                             checkedTrackColor = SlateBlue
@@ -1094,7 +1280,9 @@ fun TariffSettingsDialog(
                             isGeofenceActive,
                             latVal,
                             lngVal,
-                            radVal
+                            radVal,
+                            nfcTagIdText.trim(),
+                            nfcStrictMatching
                         )
                     }
                 },
