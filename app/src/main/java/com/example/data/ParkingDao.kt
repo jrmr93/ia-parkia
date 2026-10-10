@@ -17,6 +17,9 @@ interface ParkingDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveConfig(config: ParkingConfig)
 
+    @Query("SELECT * FROM parking_history ORDER BY endTimestamp DESC LIMIT 1")
+    suspend fun getLastHistoryItem(): ParkingHistoryItem?
+
     @Query("SELECT * FROM parking_history ORDER BY endTimestamp DESC")
     fun getAllHistory(): Flow<List<ParkingHistoryItem>>
 

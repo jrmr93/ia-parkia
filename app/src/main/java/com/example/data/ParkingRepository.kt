@@ -10,6 +10,10 @@ class ParkingRepository(private val dao: ParkingDao) {
     val configFlow: Flow<ParkingConfig?> = dao.getConfigFlow()
     val historyFlow: Flow<List<ParkingHistoryItem>> = dao.getAllHistory()
 
+    suspend fun getLastHistoryItem(): ParkingHistoryItem? = withContext(Dispatchers.IO) {
+        dao.getLastHistoryItem()
+    }
+
     suspend fun getOrCreateConfig(): ParkingConfig = withContext(Dispatchers.IO) {
         val existing = dao.getConfig()
         if (existing != null) {
@@ -112,6 +116,9 @@ class ParkingRepository(private val dao: ParkingDao) {
                 config.copy(
                     balance = remainingBalance,
                     isSessionActive = false,
+                    lastSessionEndTimestamp = actualEndTimestamp,
+                    lastSessionExitBalance = remainingBalance,
+                    lastSessionDurationSeconds = max(1L, maxDurationSeconds),
                     lastProcessedTimestamp = now,
                     elapsedSeconds = 0L,
                     accumulatedCost = 0.0
@@ -166,6 +173,9 @@ class ParkingRepository(private val dao: ParkingDao) {
                 config.copy(
                     balance = remainingBalance,
                     isSessionActive = false,
+                    lastSessionEndTimestamp = actualEndTimestamp,
+                    lastSessionExitBalance = remainingBalance,
+                    lastSessionDurationSeconds = max(1L, maxDurationSeconds),
                     lastProcessedTimestamp = now,
                     elapsedSeconds = 0L,
                     accumulatedCost = 0.0
@@ -246,6 +256,9 @@ class ParkingRepository(private val dao: ParkingDao) {
                 isSessionActive = false,
                 sessionStartTimestamp = 0L,
                 sessionInitialBalance = 0.0,
+                lastSessionEndTimestamp = now,
+                lastSessionExitBalance = remainingBalance,
+                lastSessionDurationSeconds = max(1L, elapsed),
                 elapsedSeconds = 0L,
                 accumulatedCost = 0.0,
                 lastProcessedTimestamp = now
@@ -293,6 +306,9 @@ class ParkingRepository(private val dao: ParkingDao) {
                     isSessionActive = false,
                     sessionStartTimestamp = 0L,
                     sessionInitialBalance = 0.0,
+                    lastSessionEndTimestamp = actualEndTimestamp,
+                    lastSessionExitBalance = remainingBalance,
+                    lastSessionDurationSeconds = max(1L, maxDurationSeconds),
                     lastProcessedTimestamp = now,
                     elapsedSeconds = 0L,
                     accumulatedCost = 0.0

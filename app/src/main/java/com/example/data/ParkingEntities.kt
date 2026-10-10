@@ -13,6 +13,9 @@ data class ParkingConfig(
     val isSessionActive: Boolean = false,
     val sessionStartTimestamp: Long = 0L,
     val sessionInitialBalance: Double = 0.0, // Saldo al momento de iniciar la sesión
+    val lastSessionEndTimestamp: Long = 0L,   // Fecha/hora de salida de la última sesión
+    val lastSessionExitBalance: Double = 0.0,  // Saldo al momento de salir de la última sesión
+    val lastSessionDurationSeconds: Long = 0L, // Duración en segundos de la última sesión
     val lastProcessedTimestamp: Long = 0L,
     val elapsedSeconds: Long = 0L,
     val accumulatedCost: Double = 0.0,

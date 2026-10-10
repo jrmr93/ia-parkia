@@ -1,13 +1,17 @@
 package com.example.util
 
 import android.content.Context
+import android.media.AudioManager
+import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import java.util.Locale
+import java.util.concurrent.ConcurrentLinkedQueue
 
 object TtsManager {
     private var tts: TextToSpeech? = null
+    @Volatile
     private var isInitialized = false
-    private var pendingText: String? = null
+    private val pendingQueue = ConcurrentLinkedQueue<String>()
 
     fun init(context: Context) {
         if (tts != null) return
@@ -21,9 +25,12 @@ object TtsManager {
                     if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                         tts?.setLanguage(Locale.getDefault())
                     }
-                    pendingText?.let { text ->
-                        speakInternal(text)
-                        pendingText = null
+                    // Flush pending texts
+                    while (!pendingQueue.isEmpty()) {
+                        val text = pendingQueue.poll()
+                        if (!text.isNullOrBlank()) {
+                            speakInternal(text)
+                        }
                     }
                 }
             }
@@ -33,34 +40,36 @@ object TtsManager {
     }
 
     fun speak(context: Context, text: String) {
-        if (tts == null) {
-            init(context)
-            pendingText = text
-        } else if (isInitialized) {
+        if (text.isBlank()) return
+        init(context)
+        if (isInitialized) {
             speakInternal(text)
         } else {
-            pendingText = text
+            pendingQueue.add(text)
         }
     }
 
     private fun speakInternal(text: String) {
         try {
-            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "PARKIA_TTS_ID_${System.currentTimeMillis()}")
+            val params = Bundle().apply {
+                putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_MUSIC)
+            }
+            tts?.speak(text, TextToSpeech.QUEUE_ADD, params, "PARKIA_TTS_${System.currentTimeMillis()}")
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
     fun announceSessionStart(context: Context, balance: Double, enabled: Boolean = true) {
-        if (!enabled) return
         val formatted = String.format(Locale.US, "%.2f", balance)
-        speak(context, "Usted ingresa con $formatted dólares")
+        val text = "Usted ingresa con $formatted dólares"
+        speak(context, text)
     }
 
     fun announceSessionStop(context: Context, remainingBalance: Double, enabled: Boolean = true) {
-        if (!enabled) return
         val formatted = String.format(Locale.US, "%.2f", remainingBalance)
-        speak(context, "Usted termina con $formatted dólares")
+        val text = "Usted termina con $formatted dólares"
+        speak(context, text)
     }
 
     fun shutdown() {
@@ -70,5 +79,6 @@ object TtsManager {
         } catch (_: Exception) {}
         tts = null
         isInitialized = false
+        pendingQueue.clear()
     }
 }
