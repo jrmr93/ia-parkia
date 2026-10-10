@@ -203,7 +203,10 @@ class ParkingRepository(private val dao: ParkingDao) {
      * Starts parking session.
      * Charges first block immediately ($rateAmount).
      */
-    suspend fun startSession(now: Long = System.currentTimeMillis()): Boolean = withContext(Dispatchers.IO) {
+    suspend fun startSession(
+        now: Long = System.currentTimeMillis(),
+        photoPath: String = ""
+    ): Boolean = withContext(Dispatchers.IO) {
         val config = getOrCreateConfig()
         // Must have at least enough balance for 1 full block
         if (config.balance < config.rateAmount || config.rateAmount <= 0.0) {
@@ -214,11 +217,14 @@ class ParkingRepository(private val dao: ParkingDao) {
         val firstBlockCost = config.rateAmount
         val remainingBalance = max(0.0, initialBalance - firstBlockCost)
 
+        val updatedPhotoPath = if (photoPath.isNotBlank()) photoPath else config.lastSessionPhotoPath
+
         dao.saveConfig(
             config.copy(
                 isSessionActive = true,
                 sessionStartTimestamp = now,
                 sessionInitialBalance = initialBalance,
+                lastSessionPhotoPath = updatedPhotoPath,
                 lastProcessedTimestamp = now,
                 elapsedSeconds = 0L,
                 accumulatedCost = firstBlockCost,
@@ -246,7 +252,8 @@ class ParkingRepository(private val dao: ParkingDao) {
                 endTimestamp = now,
                 durationSeconds = max(1L, elapsed),
                 costCharged = finalCost,
-                reasonEnded = reason
+                reasonEnded = reason,
+                photoPath = config.lastSessionPhotoPath
             )
         )
 

@@ -376,6 +376,10 @@ fun ParkingMainScreen(
             if (bitmap != null) {
                 viewModel.processVisionAi(bitmap)
             }
+            try {
+                val tempFile = java.io.File(context.cacheDir, "parkia_camera_photo.jpg")
+                if (tempFile.exists()) tempFile.delete()
+            } catch (_: Exception) {}
         }
     }
 

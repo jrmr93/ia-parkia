@@ -33,7 +33,8 @@ data class ParkingConfig(
     val geofenceLongitude: Double = 0.0,
     val geofenceRadiusMeters: Float = 100f,
     val registeredNfcTagId: String = "",
-    val nfcStrictMatchingEnabled: Boolean = false
+    val nfcStrictMatchingEnabled: Boolean = false,
+    val lastSessionPhotoPath: String = ""
 )
 
 @Entity(tableName = "parking_history")
@@ -44,5 +45,6 @@ data class ParkingHistoryItem(
     val endTimestamp: Long,
     val durationSeconds: Long,
     val costCharged: Double,
-    val reasonEnded: String // "Finalizado por usuario" o "Saldo Agotado"
+    val reasonEnded: String, // "Finalizado por usuario" o "Saldo Agotado"
+    val photoPath: String = ""
 )

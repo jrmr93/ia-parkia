@@ -419,6 +419,7 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
     fun resetAll() {
         viewModelScope.launch {
             repository.resetAll()
+            com.example.util.PhotoStorageManager.clearAllPhotos(getApplication())
             recalculateDerivedValues()
             postRealtimeNotification()
         }
@@ -492,6 +493,8 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
     fun processVisionAi(bitmap: android.graphics.Bitmap) {
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.update { it.copy(isAiProcessing = true) }
+            // Save photo strictly inside app's private internal storage (/data/data/com.example/files/photos/)
+            val savedPhotoPath = com.example.util.PhotoStorageManager.savePhotoToInternalStorage(getApplication(), bitmap)
             val config = _uiState.value.config
             val result = try {
                 com.example.util.GeminiAiParser.processImage(
@@ -513,6 +516,11 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                     capturedBitmap = bitmap,
                     showVisionAiDialog = true
                 )
+            }
+            if (savedPhotoPath.isNotBlank()) {
+                // Pre-update config with photo path
+                val updatedConfig = repository.getOrCreateConfig().copy(lastSessionPhotoPath = savedPhotoPath)
+                com.example.data.AppDatabase.getDatabase(getApplication()).parkingDao().saveConfig(updatedConfig)
             }
         }
     }

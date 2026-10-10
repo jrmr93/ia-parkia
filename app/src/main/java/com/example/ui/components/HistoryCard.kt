@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -46,9 +47,22 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.window.Dialog
 import com.example.data.ParkingHistoryItem
 import com.example.ui.theme.ErrorRed
 import com.example.ui.theme.SlateBlue
+import com.example.util.PhotoStorageManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -63,10 +77,13 @@ fun HistoryCard(
     accumulatedCost: Double,
     totalSpentHistorical: Double,
     totalSessionsCount: Int,
+    sessionPhotoPath: String = "",
     onResetAllClick: () -> Unit
 ) {
     val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
     val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+
+    var selectedEnlargedPhotoPath by remember { mutableStateOf<String?>(null) }
 
     val infiniteTransition = rememberInfiniteTransition(label = "history_pulse")
     val pulseAlpha by infiniteTransition.animateFloat(
@@ -129,7 +146,7 @@ fun HistoryCard(
                     }
                 }
 
-                // Botón "Resetear" (borra las sesiones y pone el saldo a $0.00)
+                // Botón "Resetear" (borra las sesiones, fotos y pone el saldo a $0.00)
                 OutlinedButton(
                     onClick = onResetAllClick,
                     colors = ButtonDefaults.outlinedButtonColors(
@@ -256,7 +273,7 @@ fun HistoryCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Sesión de parqueo activa mostrada en el registro de sesiones (sin botón modificar aquí)
+            // Sesión de parqueo activa mostrada en el registro de sesiones
             if (isSessionActive) {
                 Surface(
                     shape = RoundedCornerShape(14.dp),
@@ -266,105 +283,132 @@ fun HistoryCard(
                         .fillMaxWidth()
                         .testTag("active_session_history_item")
                 ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp)
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Header: Date and LIVE Badge
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(SlateBlue)
-                                        .alpha(pulseAlpha)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = dateFormat.format(Date(sessionStartTimestamp)),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF1E3A8A)
-                                )
-                            }
-
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = SlateBlue.copy(alpha = 0.15f)
+                        Column(modifier = Modifier.weight(1f)) {
+                            // Header: Date and LIVE Badge
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = "SESIÓN EN CURSO",
-                                    color = SlateBlue,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(SlateBlue)
+                                            .alpha(pulseAlpha)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = dateFormat.format(Date(sessionStartTimestamp)),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF1E3A8A)
+                                    )
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = SlateBlue.copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = "SESIÓN EN CURSO",
+                                        color = SlateBlue,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                }
                             }
-                        }
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
 
-                        // Time row
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            val entryTime = timeFormat.format(Date(sessionStartTimestamp))
+                            // Time row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val entryTime = timeFormat.format(Date(sessionStartTimestamp))
 
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.AccessTime,
-                                    contentDescription = null,
-                                    tint = SlateBlue,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.AccessTime,
+                                        contentDescription = null,
+                                        tint = SlateBlue,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Entrada: $entryTime",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF0F172A),
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+
                                 Text(
-                                    text = "Entrada: $entryTime",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF0F172A),
+                                    text = String.format(Locale.US, "$%.2f USD", accumulatedCost),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = SlateBlue,
                                     fontFamily = FontFamily.Monospace
                                 )
                             }
 
-                            Text(
-                                text = String.format(Locale.US, "$%.2f USD", accumulatedCost),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = SlateBlue,
-                                fontFamily = FontFamily.Monospace
-                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            val hours = elapsedSeconds / 3600
+                            val minutes = (elapsedSeconds % 3600) / 60
+                            val seconds = elapsedSeconds % 60
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Duración en curso: ${String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF475569),
+                                    fontSize = 11.sp
+                                )
+                                Text(
+                                    text = "Saldo inicial: $${String.format(Locale.US, "%.2f", sessionInitialBalance)} USD",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF64748B),
+                                    fontSize = 10.sp
+                                )
+                            }
                         }
 
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        val hours = elapsedSeconds / 3600
-                        val minutes = (elapsedSeconds % 3600) / 60
-                        val seconds = elapsedSeconds % 60
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Duración en curso: ${String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF475569),
-                                fontSize = 11.sp
-                            )
-                            Text(
-                                text = "Saldo inicial: $${String.format(Locale.US, "%.2f", sessionInitialBalance)} USD",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF64748B),
-                                fontSize = 10.sp
-                            )
+                        // Thumbnail for active session if available
+                        if (sessionPhotoPath.isNotBlank()) {
+                            val bitmap = remember(sessionPhotoPath) {
+                                PhotoStorageManager.loadPhotoFromInternalStorage(sessionPhotoPath)
+                            }
+                            if (bitmap != null) {
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(54.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .border(1.dp, SlateBlue.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                                        .clickable { selectedEnlargedPhotoPath = sessionPhotoPath }
+                                ) {
+                                    Image(
+                                        bitmap = bitmap.asImageBitmap(),
+                                        contentDescription = "Foto de Sesión Activa",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -410,11 +454,24 @@ fun HistoryCard(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     historyList.forEach { item ->
-                        HistoryItemRow(item, timeFormat, dateFormat)
+                        HistoryItemRow(
+                            item = item,
+                            timeFormat = timeFormat,
+                            dateFormat = dateFormat,
+                            onPhotoClick = { selectedEnlargedPhotoPath = it }
+                        )
                     }
                 }
             }
         }
+    }
+
+    // Modal to enlarge captured photo on tap
+    selectedEnlargedPhotoPath?.let { path ->
+        EnlargedPhotoDialog(
+            photoPath = path,
+            onDismiss = { selectedEnlargedPhotoPath = null }
+        )
     }
 }
 
@@ -422,7 +479,8 @@ fun HistoryCard(
 private fun HistoryItemRow(
     item: ParkingHistoryItem,
     timeFormat: SimpleDateFormat,
-    dateFormat: SimpleDateFormat
+    dateFormat: SimpleDateFormat,
+    onPhotoClick: (String) -> Unit
 ) {
     val isExhausted = item.reasonEnded.contains("Agotado", ignoreCase = true)
 
@@ -437,100 +495,222 @@ private fun HistoryItemRow(
             .fillMaxWidth()
             .testTag("history_item_${item.id}")
     ) {
-        Column(
-            modifier = Modifier.padding(12.dp)
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Row 1: Date & Reason badge
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.weight(1f)
             ) {
-                Text(
-                    text = dateFormat.format(Date(item.startTimestamp)),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF64748B)
-                )
-
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = if (isExhausted) ErrorRed.copy(alpha = 0.12f) else SlateBlue.copy(alpha = 0.1f)
+                // Row 1: Date & Reason badge
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = item.reasonEnded,
-                        color = if (isExhausted) ErrorRed else SlateBlue,
-                        fontSize = 10.sp,
+                        text = dateFormat.format(Date(item.startTimestamp)),
+                        style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        color = Color(0xFF64748B)
                     )
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isExhausted) ErrorRed.copy(alpha = 0.12f) else SlateBlue.copy(alpha = 0.1f)
+                    ) {
+                        Text(
+                            text = item.reasonEnded,
+                            color = if (isExhausted) ErrorRed else SlateBlue,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
                 }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Row 2: Entry and Exit time
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val entryTime = timeFormat.format(Date(item.startTimestamp))
+                    val exitTime = timeFormat.format(Date(item.endTimestamp))
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.AccessTime,
+                            contentDescription = null,
+                            tint = Color(0xFF64748B),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "$entryTime  ➔  $exitTime",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF0F172A),
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+
+                    // Cost Charged
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.AttachMoney,
+                            contentDescription = null,
+                            tint = if (isExhausted) ErrorRed else SlateBlue,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = String.format(Locale.US, "$%.2f USD", item.costCharged),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isExhausted) ErrorRed else Color(0xFF0F172A),
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Duration
+                val hours = item.durationSeconds / 3600
+                val minutes = (item.durationSeconds % 3600) / 60
+                val seconds = item.durationSeconds % 60
+                val durationText = buildString {
+                    if (hours > 0) append("${hours}h ")
+                    if (minutes > 0 || hours > 0) append("${minutes}m ")
+                    append("${seconds}s")
+                }
+
+                Text(
+                    text = "Duración total: $durationText (${String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)})",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF64748B),
+                    fontSize = 11.sp
+                )
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            // Thumbnail Preview Image (If photo exists)
+            if (item.photoPath.isNotBlank()) {
+                val bitmap = remember(item.photoPath) {
+                    PhotoStorageManager.loadPhotoFromInternalStorage(item.photoPath)
+                }
+                if (bitmap != null) {
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(54.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .border(1.dp, SlateBlue.copy(alpha = 0.3f), RoundedCornerShape(10.dp))
+                            .clickable { onPhotoClick(item.photoPath) }
+                    ) {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = "Miniatura de Foto",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
-            // Row 2: Entry and Exit time
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+@Composable
+private fun EnlargedPhotoDialog(
+    photoPath: String,
+    onDismiss: () -> Unit
+) {
+    val bitmap = remember(photoPath) {
+        PhotoStorageManager.loadPhotoFromInternalStorage(photoPath)
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                val entryTime = timeFormat.format(Date(item.startTimestamp))
-                val exitTime = timeFormat.format(Date(item.endTimestamp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = CircleShape,
+                            color = SlateBlue.copy(alpha = 0.1f),
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.DirectionsCar,
+                                    contentDescription = null,
+                                    tint = SlateBlue,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Fotografía de Parqueo",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF0F172A)
+                        )
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Cerrar",
+                            tint = Color(0xFF64748B)
+                        )
+                    }
+                }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.AccessTime,
-                        contentDescription = null,
-                        tint = Color(0xFF64748B),
-                        modifier = Modifier.size(14.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = "Foto Ampliada",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 380.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                } else {
                     Text(
-                        text = "$entryTime  ➔  $exitTime",
+                        text = "Imagen no disponible.",
                         style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF0F172A),
-                        fontFamily = FontFamily.Monospace
+                        color = Color(0xFF64748B)
                     )
                 }
 
-                // Cost Charged
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.AttachMoney,
-                        contentDescription = null,
-                        tint = if (isExhausted) ErrorRed else SlateBlue,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = String.format(Locale.US, "$%.2f USD", item.costCharged),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isExhausted) ErrorRed else Color(0xFF0F172A),
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "🔒 Guardada en almacenamiento privado interno",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF94A3B8),
+                    fontSize = 11.sp
+                )
             }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Duration
-            val hours = item.durationSeconds / 3600
-            val minutes = (item.durationSeconds % 3600) / 60
-            val seconds = item.durationSeconds % 60
-            val durationText = buildString {
-                if (hours > 0) append("${hours}h ")
-                if (minutes > 0 || hours > 0) append("${minutes}m ")
-                append("${seconds}s")
-            }
-
-            Text(
-                text = "Duración total: $durationText (${String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)})",
-                style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF64748B),
-                fontSize = 11.sp
-            )
         }
     }
 }
