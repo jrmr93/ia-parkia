@@ -73,6 +73,8 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
             recalculateDerivedValues()
             if (initial.notificationsEnabled) {
                 com.example.service.ParkiaForegroundService.startOrUpdate(getApplication(), forceUpdate = false)
+                com.example.util.BalanceAlarmScheduler.scheduleOrCancel(getApplication(), true, initial.notificationIntervalMinutes)
+                com.example.util.BalanceNotificationWorker.scheduleOrCancel(getApplication(), true, initial.notificationIntervalMinutes)
             }
         }
 
@@ -118,6 +120,7 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
             isSessionActive = config.isSessionActive,
             formattedDateTime = nowFormatted
         )
+        com.example.util.BalanceAlarmScheduler.scheduleNext(getApplication(), config.notificationIntervalMinutes)
     }
 
     /**
@@ -237,6 +240,10 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                 com.example.util.TtsManager.announceSessionStart(getApplication(), startBalance, configBefore.ttsAnnouncementsEnabled)
                 recalculateDerivedValues()
                 postRealtimeNotification()
+                if (configBefore.notificationsEnabled) {
+                    com.example.service.ParkiaForegroundService.startOrUpdate(getApplication(), forceUpdate = true)
+                    com.example.util.BalanceAlarmScheduler.scheduleNext(getApplication(), configBefore.notificationIntervalMinutes)
+                }
             }
         }
     }
@@ -248,6 +255,10 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
             com.example.util.TtsManager.announceSessionStop(getApplication(), configAfter.balance, configAfter.ttsAnnouncementsEnabled)
             recalculateDerivedValues()
             postRealtimeNotification()
+            if (configAfter.notificationsEnabled) {
+                com.example.service.ParkiaForegroundService.startOrUpdate(getApplication(), forceUpdate = true)
+                com.example.util.BalanceAlarmScheduler.scheduleNext(getApplication(), configAfter.notificationIntervalMinutes)
+            }
         }
     }
 
@@ -401,6 +412,7 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
             } else {
                 com.example.service.ParkiaForegroundService.stop(getApplication())
             }
+            com.example.util.BalanceAlarmScheduler.scheduleOrCancel(getApplication(), notifyEnabled, notifyInterval)
             com.example.util.BalanceNotificationWorker.scheduleOrCancel(getApplication(), notifyEnabled, notifyInterval)
             com.example.service.ParkiaTileService.updateQuickTileState(getApplication())
             recalculateDerivedValues()

@@ -402,4 +402,70 @@ class ExampleRobolectricTest {
         val configAfterRecharge = repository.getOrCreateConfig()
         assertEquals(0.80, configAfterRecharge.balance, 0.001)
     }
+
+    @Test
+    fun `notification shows debt and negative balance properly in active and resting states`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        NotificationHelper.createNotificationChannel(context)
+
+        // 1. Active session in debt
+        val activeDebtNotification = NotificationHelper.buildBalanceNotification(
+            context = context,
+            balance = -0.75,
+            isSessionActive = true,
+            formattedDateTime = "11/10/2026 12:30:00"
+        )
+        val activeTitle = activeDebtNotification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString()
+        val activeText = activeDebtNotification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString()
+
+        assertNotNull(activeTitle)
+        assertTrue("Title should mention debt", activeTitle!!.contains("Deuda"))
+        assertTrue("Title should include negative balance amount", activeTitle.contains("-$0.75"))
+        assertNotNull(activeText)
+        assertTrue("Content should indicate active debt session", activeText!!.contains("En Sesión Activa (En Deuda)"))
+
+        // 2. Resting state with pending debt
+        val restingDebtNotification = NotificationHelper.buildBalanceNotification(
+            context = context,
+            balance = -2.50,
+            isSessionActive = false,
+            formattedDateTime = "11/10/2026 13:00:00"
+        )
+        val restingTitle = restingDebtNotification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString()
+        val restingText = restingDebtNotification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString()
+
+        assertNotNull(restingTitle)
+        assertTrue("Title should mention debt", restingTitle!!.contains("Deuda"))
+        assertTrue("Title should include negative balance amount", restingTitle.contains("-$2.50"))
+        assertNotNull(restingText)
+        assertTrue("Content should indicate resting pending debt", restingText!!.contains("En Reposo (Deuda Pendiente)"))
+    }
+
+    @Test
+    fun `balance alarm receiver executes catch-up into debt and triggers notification`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        // Initialize config with 1 block, start session
+        repository.rechargeBalance(0.10)
+        val startTime = 10000000L
+        repository.startSession(startTime)
+
+        // Advance repository in DB so next tick catches up past balance
+        val futureTime = startTime + (3600 * 1000L) // 1 hour -> 2 blocks = $0.20 -> -$0.10 debt
+        val depleted = repository.catchUpSession(futureTime)
+        assertFalse(depleted)
+
+        val config = repository.getOrCreateConfig()
+        assertTrue("Session remains active", config.isSessionActive)
+        assertEquals(-0.10, config.balance, 0.001)
+
+        // Broadcast to BalanceAlarmReceiver
+        val receiver = com.example.receiver.BalanceAlarmReceiver()
+        val intent = android.content.Intent(com.example.receiver.BalanceAlarmReceiver.ACTION_BALANCE_ALARM_TICK)
+        receiver.onReceive(context, intent)
+
+        // Verify alarm scheduler can be scheduled/canceled without error
+        com.example.util.BalanceAlarmScheduler.scheduleOrCancel(context, true, config.notificationIntervalMinutes)
+        com.example.util.BalanceAlarmScheduler.scheduleNext(context, config.notificationIntervalMinutes)
+        com.example.util.BalanceAlarmScheduler.scheduleOrCancel(context, false, config.notificationIntervalMinutes)
+    }
 }

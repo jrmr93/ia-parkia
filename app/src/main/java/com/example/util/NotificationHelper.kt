@@ -50,11 +50,8 @@ object NotificationHelper {
             isDebt -> "En Reposo (Deuda Pendiente)"
             else -> "En Reposo"
         }
-        val balanceText = if (isDebt) {
-            String.format(Locale.US, "-$%.2f USD", -balance)
-        } else {
-            String.format(Locale.US, "$%.2f USD", balance)
-        }
+        val formattedAmount = String.format(Locale.US, "%.2f", if (isDebt) -balance else balance)
+        val balanceText = if (isDebt) "-$$formattedAmount USD" else "$$formattedAmount USD"
         val titleText = if (isDebt) "Parkia - Deuda: $balanceText" else "Parkia - Saldo: $balanceText"
 
         val intent = android.content.Intent(context, com.example.MainActivity::class.java).apply {
@@ -67,11 +64,24 @@ object NotificationHelper {
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
 
+        val contentText = "Actualizado: $formattedDateTime • $stateText"
+        val detailText = if (isDebt) {
+            if (isSessionActive) {
+                "⚠️ Saldo negativo por deuda: -$formattedAmount USD\nSesión en curso acumulando deuda.\nÚltima actualización: $formattedDateTime"
+            } else {
+                "⚠️ Saldo negativo por deuda: -$formattedAmount USD\nDeuda pendiente por saldar.\nÚltima actualización: $formattedDateTime"
+            }
+        } else {
+            "Saldo disponible: $balanceText\nEstado: $stateText\nÚltima actualización: $formattedDateTime"
+        }
+
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_car)
             .setContentTitle(titleText)
-            .setContentText("Actualizado: $formattedDateTime • $stateText")
+            .setContentText(contentText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(detailText))
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .setContentIntent(pendingIntent)
             .setOnlyAlertOnce(true)
@@ -84,6 +94,7 @@ object NotificationHelper {
         isSessionActive: Boolean,
         formattedDateTime: String
     ) {
+        createNotificationChannel(context)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(
                     context,

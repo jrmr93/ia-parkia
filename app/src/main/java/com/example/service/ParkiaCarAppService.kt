@@ -115,8 +115,11 @@ class ParkiaCarScreen(carContext: CarContext) : Screen(carContext) {
                 val current = repository.getOrCreateConfig()
                 if (current.isSessionActive) {
                     repository.stopSession(reason = "Finalizado desde Android Auto")
-                    ParkiaForegroundService.stop(carContext.applicationContext)
                     val updated = repository.getOrCreateConfig()
+                    if (updated.notificationsEnabled) {
+                        ParkiaForegroundService.startOrUpdate(carContext.applicationContext, forceUpdate = true)
+                        com.example.util.BalanceAlarmScheduler.scheduleNext(carContext.applicationContext, updated.notificationIntervalMinutes)
+                    }
                     val history = repository.getLastHistoryItem()
 
                     withContext(Dispatchers.Main) {

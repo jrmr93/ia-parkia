@@ -25,14 +25,19 @@ class BalanceNotificationWorker(
         val config = repository.getOrCreateConfig()
 
         if (config.notificationsEnabled) {
+            if (config.isSessionActive) {
+                repository.catchUpSession()
+            }
+            val updatedConfig = repository.getOrCreateConfig()
             val dateTimeFormat = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault())
             val nowFormatted = dateTimeFormat.format(Date())
             NotificationHelper.showBalanceNotification(
                 context = applicationContext,
-                balance = config.balance,
-                isSessionActive = config.isSessionActive,
+                balance = updatedConfig.balance,
+                isSessionActive = updatedConfig.isSessionActive,
                 formattedDateTime = nowFormatted
             )
+            BalanceAlarmScheduler.scheduleNext(applicationContext, updatedConfig.notificationIntervalMinutes)
         }
 
         return Result.success()

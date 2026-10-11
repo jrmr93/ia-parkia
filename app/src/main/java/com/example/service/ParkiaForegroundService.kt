@@ -9,6 +9,7 @@ import android.os.IBinder
 import androidx.core.content.ContextCompat
 import com.example.data.AppDatabase
 import com.example.data.ParkingRepository
+import com.example.util.BalanceAlarmScheduler
 import com.example.util.NotificationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +28,30 @@ class ParkiaForegroundService : Service() {
     private val dateTimeFormat = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault())
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        NotificationHelper.createNotificationChannel(this)
+        val initialNotification = NotificationHelper.buildBalanceNotification(
+            context = this,
+            balance = 0.0,
+            isSessionActive = false,
+            formattedDateTime = dateTimeFormat.format(Date())
+        )
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    NotificationHelper.NOTIFICATION_ID,
+                    initialNotification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                )
+            } else {
+                startForeground(NotificationHelper.NOTIFICATION_ID, initialNotification)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
@@ -58,12 +83,8 @@ class ParkiaForegroundService : Service() {
                 formattedDateTime = nowFormatted
             )
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    val serviceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-                    } else {
-                        0
-                    }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    val serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
                     startForeground(NotificationHelper.NOTIFICATION_ID, notification, serviceType)
                 } else {
                     startForeground(NotificationHelper.NOTIFICATION_ID, notification)
@@ -98,6 +119,7 @@ class ParkiaForegroundService : Service() {
                 }
 
                 updateNotification(repository)
+                BalanceAlarmScheduler.scheduleNext(applicationContext, config.notificationIntervalMinutes)
 
                 val intervalMs = (config.notificationIntervalMinutes * 60000L).coerceAtLeast(5000L)
                 delay(intervalMs)
@@ -125,9 +147,55 @@ class ParkiaForegroundService : Service() {
         )
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        serviceScope.launch {
+            try {
+                val repository = ParkingRepository(
+                    AppDatabase.getDatabase(applicationContext).parkingDao()
+                )
+                val config = repository.getOrCreateConfig()
+                if (config.notificationsEnabled) {
+                    if (config.isSessionActive) {
+                        repository.catchUpSession()
+                    }
+                    val updated = repository.getOrCreateConfig()
+                    val nowFormatted = dateTimeFormat.format(Date())
+                    NotificationHelper.showBalanceNotification(
+                        context = applicationContext,
+                        balance = updated.balance,
+                        isSessionActive = updated.isSessionActive,
+                        formattedDateTime = nowFormatted
+                    )
+                    BalanceAlarmScheduler.scheduleNext(applicationContext, updated.notificationIntervalMinutes)
+                }
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         periodicJob?.cancel()
+        serviceScope.launch {
+            try {
+                val repository = ParkingRepository(
+                    AppDatabase.getDatabase(applicationContext).parkingDao()
+                )
+                val config = repository.getOrCreateConfig()
+                if (config.notificationsEnabled) {
+                    val nowFormatted = dateTimeFormat.format(Date())
+                    NotificationHelper.showBalanceNotification(
+                        context = applicationContext,
+                        balance = config.balance,
+                        isSessionActive = config.isSessionActive,
+                        formattedDateTime = nowFormatted
+                    )
+                    BalanceAlarmScheduler.scheduleNext(applicationContext, config.notificationIntervalMinutes)
+                }
+            } catch (_: Throwable) {
+            }
+        }
     }
 
     companion object {

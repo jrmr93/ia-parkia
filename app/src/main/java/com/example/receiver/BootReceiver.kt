@@ -22,6 +22,16 @@ class BootReceiver : BroadcastReceiver() {
                     val config = repository.getOrCreateConfig()
                     if (config.notificationsEnabled) {
                         ParkiaForegroundService.startOrUpdate(context.applicationContext)
+                        com.example.util.BalanceAlarmScheduler.scheduleOrCancel(
+                            context.applicationContext,
+                            true,
+                            config.notificationIntervalMinutes
+                        )
+                        com.example.util.BalanceNotificationWorker.scheduleOrCancel(
+                            context.applicationContext,
+                            true,
+                            config.notificationIntervalMinutes
+                        )
                     }
                     if (config.geofenceEnabled) {
                         com.example.util.GeofenceManager.registerGeofence(
