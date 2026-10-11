@@ -468,4 +468,166 @@ class ExampleRobolectricTest {
         com.example.util.BalanceAlarmScheduler.scheduleNext(context, config.notificationIntervalMinutes)
         com.example.util.BalanceAlarmScheduler.scheduleOrCancel(context, false, config.notificationIntervalMinutes)
     }
+
+    @Test
+    fun `session started with photo stores photo in active config and persists into history`(): Unit = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        repository.rechargeBalance(2.00)
+
+        // Save dummy photo
+        val bitmap = android.graphics.Bitmap.createBitmap(100, 100, android.graphics.Bitmap.Config.ARGB_8888)
+        val photoPath = com.example.util.PhotoStorageManager.savePhotoToInternalStorage(context, bitmap)
+        assertTrue("Photo should be saved to internal storage", photoPath.isNotBlank())
+
+        val now = 10000000L
+        val started = repository.startSession(now = now, photoPath = photoPath)
+        assertTrue(started)
+
+        // 1. Active session must immediately have the photoPath in config
+        val activeConfig = repository.getOrCreateConfig()
+        assertTrue("Session must be active", activeConfig.isSessionActive)
+        assertEquals("Active session must display captured photo path", photoPath, activeConfig.lastSessionPhotoPath)
+
+        // 2. Stop session
+        repository.stopSession(now = now + 1800000L, reason = "Finalizado por usuario")
+
+        // 3. History record must have the photoPath
+        val history = repository.historyFlow.first()
+        assertEquals(1, history.size)
+        assertEquals(photoPath, history[0].photoPath)
+
+        // 4. Config lastSessionPhotoPath must now be cleared for future sessions
+        val finishedConfig = repository.getOrCreateConfig()
+        assertFalse("Session is stopped", finishedConfig.isSessionActive)
+        assertEquals("lastSessionPhotoPath should be cleared on session stop", "", finishedConfig.lastSessionPhotoPath)
+
+        // 5. Next session started without photo should NOT have the old photo
+        repository.startSession(now = now + 2000000L, photoPath = "")
+        val nextActiveConfig = repository.getOrCreateConfig()
+        assertTrue(nextActiveConfig.isSessionActive)
+        assertEquals("Subsequent session without photo must be blank", "", nextActiveConfig.lastSessionPhotoPath)
+
+        // Clean up
+        com.example.util.PhotoStorageManager.deletePhoto(photoPath)
+    }
+
+    @Test
+    fun `resetAll clears lastSessionPhotoPath`(): Unit = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        repository.rechargeBalance(2.00)
+        val bitmap = android.graphics.Bitmap.createBitmap(50, 50, android.graphics.Bitmap.Config.ARGB_8888)
+        val photoPath = com.example.util.PhotoStorageManager.savePhotoToInternalStorage(context, bitmap)
+
+        repository.startSession(photoPath = photoPath)
+        assertEquals(photoPath, repository.getOrCreateConfig().lastSessionPhotoPath)
+
+        repository.resetAll()
+        val resetConfig = repository.getOrCreateConfig()
+        assertEquals("", resetConfig.lastSessionPhotoPath)
+        assertFalse(resetConfig.isSessionActive)
+
+        com.example.util.PhotoStorageManager.deletePhoto(photoPath)
+    }
+
+    @Test
+    fun `resumeSessionFromHistory restores entry timestamp initial balance and photo and removes item from history`(): Unit = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        repository.rechargeBalance(5.00)
+
+        // Create a photo
+        val bitmap = android.graphics.Bitmap.createBitmap(40, 40, android.graphics.Bitmap.Config.ARGB_8888)
+        val photoPath = com.example.util.PhotoStorageManager.savePhotoToInternalStorage(context, bitmap)
+
+        val t0 = 10000000L
+        repository.startSession(now = t0, photoPath = photoPath)
+
+        // Session stops after 15 minutes (900 seconds) -> 1 block of 30 min charged = $0.10
+        val t1 = t0 + 900_000L
+        repository.stopSession(now = t1, reason = "Finalizado por usuario")
+
+        // Check history item
+        val historyBefore = repository.historyFlow.first()
+        assertEquals(1, historyBefore.size)
+        val itemToResume = historyBefore[0]
+        assertEquals(t0, itemToResume.startTimestamp)
+        assertEquals(5.00, itemToResume.initialBalance, 0.001)
+        assertEquals(photoPath, itemToResume.photoPath)
+        assertEquals(0.10, itemToResume.costCharged, 0.001)
+
+        // Current config has inactive session
+        val inactiveConfig = repository.getOrCreateConfig()
+        assertFalse(inactiveConfig.isSessionActive)
+
+        // Resume session at t0 + 60 minutes (3600 seconds)
+        // At 60 min with 30m block rate: 2 blocks = $0.20 charged from initial $5.00 -> balance = $4.80
+        val t2 = t0 + 3600_000L
+        val resumed = repository.resumeSessionFromHistory(item = itemToResume, now = t2)
+        assertTrue("Session must be resumed successfully", resumed)
+
+        // 1. History item must be removed from history list
+        val historyAfterResume = repository.historyFlow.first()
+        assertEquals("Resumed item must be removed from history list", 0, historyAfterResume.size)
+
+        // 2. Active config must restore original entry timestamp, initial balance, and photo
+        val resumedConfig = repository.getOrCreateConfig()
+        assertTrue("Session must now be active", resumedConfig.isSessionActive)
+        assertEquals("Must restore original start timestamp", t0, resumedConfig.sessionStartTimestamp)
+        assertEquals("Must restore original initial balance", 5.00, resumedConfig.sessionInitialBalance, 0.001)
+        assertEquals("Must restore original photo path", photoPath, resumedConfig.lastSessionPhotoPath)
+        assertEquals("Elapsed seconds must be 3600", 3600L, resumedConfig.elapsedSeconds)
+        assertEquals("Accumulated cost for 2 blocks must be 0.20", 0.20, resumedConfig.accumulatedCost, 0.001)
+        assertEquals("Current balance must be 4.80", 4.80, resumedConfig.balance, 0.001)
+
+        // 3. Stop the resumed session at t0 + 65 minutes (3900 seconds -> 3 blocks = $0.30)
+        val t3 = t0 + 3900_000L
+        repository.stopSession(now = t3, reason = "Finalizado por usuario tras reanudar")
+
+        val historyFinal = repository.historyFlow.first()
+        assertEquals(1, historyFinal.size)
+        val finalItem = historyFinal[0]
+        assertEquals(t0, finalItem.startTimestamp)
+        assertEquals(t3, finalItem.endTimestamp)
+        assertEquals(5.00, finalItem.initialBalance, 0.001)
+        assertEquals(0.30, finalItem.costCharged, 0.001)
+        assertEquals(photoPath, finalItem.photoPath)
+        assertEquals(4.70, repository.getOrCreateConfig().balance, 0.001)
+
+        com.example.util.PhotoStorageManager.deletePhoto(photoPath)
+    }
+
+    @Test
+    fun `resumeSessionFromHistory stops and archives currently active session before resuming`(): Unit = runBlocking {
+        repository.rechargeBalance(10.00)
+
+        // Session 1: Started at t0, stopped at t1
+        val t0 = 10000000L
+        repository.startSession(now = t0)
+        val t1 = t0 + 600_000L // 10 min
+        repository.stopSession(now = t1, reason = "Sesion 1 finalizada")
+
+        val historyAfterS1 = repository.historyFlow.first()
+        assertEquals(1, historyAfterS1.size)
+        val session1HistoryItem = historyAfterS1[0]
+
+        // Session 2: Started at t2
+        val t2 = t1 + 300_000L
+        repository.startSession(now = t2)
+        assertTrue(repository.getOrCreateConfig().isSessionActive)
+
+        // While Session 2 is active, resume Session 1 at t3
+        val t3 = t2 + 900_000L
+        repository.resumeSessionFromHistory(item = session1HistoryItem, now = t3)
+
+        // Session 2 should have been saved to history, and Session 1 removed from history
+        val historyAfterResume = repository.historyFlow.first()
+        assertEquals(1, historyAfterResume.size)
+        val archivedSession2 = historyAfterResume[0]
+        assertEquals("Session 2 was archived", t2, archivedSession2.startTimestamp)
+        assertEquals("Finalizado para reanudar sesión anterior", archivedSession2.reasonEnded)
+
+        // Active session is Session 1
+        val activeConfig = repository.getOrCreateConfig()
+        assertTrue(activeConfig.isSessionActive)
+        assertEquals(t0, activeConfig.sessionStartTimestamp)
+    }
 }

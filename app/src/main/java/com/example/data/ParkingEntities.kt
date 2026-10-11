@@ -46,5 +46,6 @@ data class ParkingHistoryItem(
     val durationSeconds: Long,
     val costCharged: Double,
     val reasonEnded: String, // "Finalizado por usuario" o "Saldo Agotado"
-    val photoPath: String = ""
+    val photoPath: String = "",
+    val initialBalance: Double = 0.0
 )

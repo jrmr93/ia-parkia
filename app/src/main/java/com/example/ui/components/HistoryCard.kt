@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -78,7 +79,8 @@ fun HistoryCard(
     totalSpentHistorical: Double,
     totalSessionsCount: Int,
     sessionPhotoPath: String = "",
-    onResetAllClick: () -> Unit
+    onResetAllClick: () -> Unit,
+    onHistoryItemClick: (ParkingHistoryItem) -> Unit = {}
 ) {
     val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
     val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
@@ -412,6 +414,7 @@ fun HistoryCard(
                                         .clip(RoundedCornerShape(10.dp))
                                         .border(1.dp, SlateBlue.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
                                         .clickable { selectedEnlargedPhotoPath = sessionPhotoPath }
+                                        .testTag("active_session_photo_thumbnail")
                                 ) {
                                     Image(
                                         bitmap = bitmap.asImageBitmap(),
@@ -470,7 +473,8 @@ fun HistoryCard(
                             item = item,
                             timeFormat = timeFormat,
                             dateFormat = dateFormat,
-                            onPhotoClick = { selectedEnlargedPhotoPath = it }
+                            onPhotoClick = { selectedEnlargedPhotoPath = it },
+                            onItemClick = onHistoryItemClick
                         )
                     }
                 }
@@ -492,7 +496,8 @@ private fun HistoryItemRow(
     item: ParkingHistoryItem,
     timeFormat: SimpleDateFormat,
     dateFormat: SimpleDateFormat,
-    onPhotoClick: (String) -> Unit
+    onPhotoClick: (String) -> Unit,
+    onItemClick: (ParkingHistoryItem) -> Unit
 ) {
     val isExhausted = item.reasonEnded.contains("Agotado", ignoreCase = true)
 
@@ -505,6 +510,8 @@ private fun HistoryItemRow(
         ),
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { onItemClick(item) }
             .testTag("history_item_${item.id}")
     ) {
         Row(
@@ -599,12 +606,44 @@ private fun HistoryItemRow(
                     append("${seconds}s")
                 }
 
-                Text(
-                    text = "Duración total: $durationText (${String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)})",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF64748B),
-                    fontSize = 11.sp
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Duración total: $durationText (${String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)})",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF64748B),
+                        fontSize = 11.sp
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = SlateBlue.copy(alpha = 0.08f),
+                        border = BorderStroke(0.5.dp, SlateBlue.copy(alpha = 0.3f)),
+                        modifier = Modifier.padding(start = 4.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Restore,
+                                contentDescription = "Reanudar sesión",
+                                tint = SlateBlue,
+                                modifier = Modifier.size(11.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "Reanudar",
+                                color = SlateBlue,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
             }
 
             // Thumbnail Preview Image (If photo exists)

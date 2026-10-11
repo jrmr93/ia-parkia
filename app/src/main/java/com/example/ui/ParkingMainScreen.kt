@@ -26,6 +26,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.ui.components.ConfirmResumeSessionDialog
 import com.example.ui.components.ConfirmStartSessionDialog
 import com.example.ui.components.ConfirmStopSessionDialog
 import com.example.ui.components.EditActiveSessionDialog
@@ -42,6 +43,7 @@ import com.example.ui.components.ResetBalanceDialog
 import com.example.ui.components.TariffSettingsDialog
 import com.example.ui.components.WalletCard
 import com.example.util.SecurityManager
+import com.example.data.ParkingHistoryItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -94,11 +96,13 @@ fun ParkingMainScreen(
 
     var showPinAuthDialog by remember { mutableStateOf(false) }
     var pendingAuthenticatedAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var itemToResume by remember { mutableStateOf<ParkingHistoryItem?>(null) }
 
-    // Helper for authenticating via PIN/Biometrics before performing sensitive reset actions
-    fun authenticateBeforeAction(onSuccess: () -> Unit) {
+    // Helper for authenticating via PIN/Biometrics before performing sensitive actions
+    fun authenticateBeforeAction(requireAuth: Boolean = false, onSuccess: () -> Unit) {
         val isGlobalAuthEnabled = SecurityManager.isGlobalAuthEnabled(context)
-        if (activity != null && isGlobalAuthEnabled && SecurityManager.isPinConfigured(context)) {
+        val shouldAuth = (isGlobalAuthEnabled || requireAuth) && SecurityManager.isPinConfigured(context)
+        if (activity != null && shouldAuth) {
             if (SecurityManager.canAuthenticateBiometrics(context)) {
                 SecurityManager.launchBiometricPrompt(
                     activity = activity,
@@ -188,11 +192,13 @@ fun ParkingMainScreen(
                         accumulatedCost = uiState.config.accumulatedCost,
                         totalSpentHistorical = uiState.totalSpentHistorical,
                         totalSessionsCount = uiState.totalSessionsCount,
+                        sessionPhotoPath = uiState.config.lastSessionPhotoPath,
                         onResetAllClick = {
                             authenticateBeforeAction {
                                 viewModel.setShowResetAllDialog(true)
                             }
-                        }
+                        },
+                        onHistoryItemClick = { itemToResume = it }
                     )
                 }
 
@@ -506,14 +512,21 @@ fun ParkingMainScreen(
         com.example.ui.components.VisionAiResultDialog(
             bitmap = uiState.capturedBitmap,
             result = uiState.visionAiResult!!,
-            onDismiss = { viewModel.setShowVisionAiDialog(false) },
+            onDismiss = {
+                viewModel.setShowVisionAiDialog(false)
+                viewModel.clearCapturedPhoto()
+            },
             onRetakePhoto = {
                 viewModel.setShowVisionAiDialog(false)
                 launchCameraIntent()
             },
             onConfirm = { balance, timestamp ->
                 viewModel.setShowVisionAiDialog(false)
-                viewModel.startCustomSession(balance, timestamp)
+                viewModel.startCustomSession(
+                    initialBalance = balance,
+                    timestamp = timestamp,
+                    photoPath = uiState.capturedPhotoPath ?: uiState.config.lastSessionPhotoPath
+                )
             }
         )
     }
@@ -529,6 +542,21 @@ fun ParkingMainScreen(
         NoFundsAlertDialog(
             onDismiss = { viewModel.dismissNoFundsAlert() },
             onRechargeClick = { viewModel.setShowRechargeCustomDialog(true) }
+        )
+    }
+
+    itemToResume?.let { historyItem ->
+        ConfirmResumeSessionDialog(
+            item = historyItem,
+            isSessionActive = uiState.config.isSessionActive,
+            onDismiss = { itemToResume = null },
+            onConfirm = {
+                val target = historyItem
+                itemToResume = null
+                authenticateBeforeAction(requireAuth = true) {
+                    viewModel.resumeSessionFromHistory(target)
+                }
+            }
         )
     }
 

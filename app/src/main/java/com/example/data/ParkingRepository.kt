@@ -195,7 +195,8 @@ class ParkingRepository(private val dao: ParkingDao) {
                 durationSeconds = max(1L, elapsed),
                 costCharged = finalCost,
                 reasonEnded = reason,
-                photoPath = config.lastSessionPhotoPath
+                photoPath = config.lastSessionPhotoPath,
+                initialBalance = config.sessionInitialBalance
             )
         )
 
@@ -210,9 +211,58 @@ class ParkingRepository(private val dao: ParkingDao) {
                 lastSessionDurationSeconds = max(1L, elapsed),
                 elapsedSeconds = 0L,
                 accumulatedCost = 0.0,
+                lastProcessedTimestamp = now,
+                lastSessionPhotoPath = ""
+            )
+        )
+    }
+
+    /**
+     * Resumes a finished session from history, restoring its start timestamp,
+     * initial balance, and photo into the active session config.
+     * Recalculates elapsed time, blocks, and current balance from entry time to now.
+     * Deletes the resumed entry from history so it continues as the active session.
+     */
+    suspend fun resumeSessionFromHistory(
+        item: ParkingHistoryItem,
+        now: Long = System.currentTimeMillis()
+    ): Boolean = withContext(Dispatchers.IO) {
+        val config = getOrCreateConfig()
+
+        // If a session is currently active, stop and save it first
+        if (config.isSessionActive) {
+            stopSession(now = now, reason = "Finalizado para reanudar sesión anterior")
+        }
+
+        val baseConfig = getOrCreateConfig()
+        dao.deleteHistoryItem(item.id)
+
+        val effectiveStart = item.startTimestamp
+        val effectiveInitialBalance = if (item.initialBalance > 0.0) {
+            item.initialBalance
+        } else {
+            maxOf(item.costCharged, baseConfig.rateAmount)
+        }
+        val effectivePhotoPath = item.photoPath
+
+        val elapsed = max(0L, (now - effectiveStart) / 1000L)
+        val blocks = calculateBlocks(elapsed, baseConfig.rateMinutes)
+        val currentCost = blocks * baseConfig.rateAmount
+        val currentBalance = effectiveInitialBalance - currentCost
+
+        dao.saveConfig(
+            baseConfig.copy(
+                isSessionActive = true,
+                sessionStartTimestamp = effectiveStart,
+                sessionInitialBalance = effectiveInitialBalance,
+                lastSessionPhotoPath = effectivePhotoPath,
+                elapsedSeconds = elapsed,
+                accumulatedCost = currentCost,
+                balance = currentBalance,
                 lastProcessedTimestamp = now
             )
         )
+        return@withContext true
     }
 
     /**
@@ -297,7 +347,8 @@ class ParkingRepository(private val dao: ParkingDao) {
                 sessionStartTimestamp = 0L,
                 sessionInitialBalance = 0.0,
                 elapsedSeconds = 0L,
-                accumulatedCost = 0.0
+                accumulatedCost = 0.0,
+                lastSessionPhotoPath = ""
             )
         )
     }

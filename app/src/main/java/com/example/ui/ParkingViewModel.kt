@@ -44,6 +44,7 @@ data class ParkingUiState(
     val voiceAiResult: com.example.util.AiRecognitionResult? = null,
     val visionAiResult: com.example.util.AiRecognitionResult? = null,
     val capturedBitmap: android.graphics.Bitmap? = null,
+    val capturedPhotoPath: String? = null,
     val isAiProcessing: Boolean = false,
     val isScanningNfcForRegistration: Boolean = false,
     val scannedNfcTagId: String? = null
@@ -229,11 +230,11 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // Direct Session Controls
-    fun startSession() {
+    fun startSession(photoPath: String = "") {
         viewModelScope.launch {
             val configBefore = repository.getOrCreateConfig()
             val startBalance = configBefore.balance
-            val started = repository.startSession()
+            val started = repository.startSession(photoPath = photoPath)
             if (!started) {
                 _uiState.update { it.copy(showNoFundsToStartAlert = true) }
             } else {
@@ -258,6 +259,23 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
             if (configAfter.notificationsEnabled) {
                 com.example.service.ParkiaForegroundService.startOrUpdate(getApplication(), forceUpdate = true)
                 com.example.util.BalanceAlarmScheduler.scheduleNext(getApplication(), configAfter.notificationIntervalMinutes)
+            }
+        }
+    }
+
+    fun resumeSessionFromHistory(item: ParkingHistoryItem) {
+        viewModelScope.launch {
+            val resumed = repository.resumeSessionFromHistory(item)
+            if (resumed) {
+                val config = repository.getOrCreateConfig()
+                com.example.util.TtsManager.announceSessionStart(getApplication(), config.sessionInitialBalance, config.ttsAnnouncementsEnabled)
+                recalculateDerivedValues()
+                postRealtimeNotification()
+                if (config.notificationsEnabled) {
+                    com.example.service.ParkiaForegroundService.startOrUpdate(getApplication(), forceUpdate = true)
+                    com.example.util.BalanceAlarmScheduler.scheduleNext(getApplication(), config.notificationIntervalMinutes)
+                }
+                com.example.service.ParkiaTileService.updateQuickTileState(getApplication())
             }
         }
     }
@@ -525,6 +543,7 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                     isAiProcessing = false,
                     visionAiResult = result,
                     capturedBitmap = bitmap,
+                    capturedPhotoPath = savedPhotoPath,
                     showVisionAiDialog = true
                 )
             }
@@ -536,14 +555,40 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun startCustomSession(initialBalance: Double, timestamp: Long = System.currentTimeMillis()) {
+    fun clearCapturedPhoto() {
+        _uiState.update {
+            it.copy(
+                capturedBitmap = null,
+                capturedPhotoPath = null,
+                visionAiResult = null
+            )
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val config = repository.getOrCreateConfig()
+            if (!config.isSessionActive && config.lastSessionPhotoPath.isNotBlank()) {
+                val updatedConfig = config.copy(lastSessionPhotoPath = "")
+                com.example.data.AppDatabase.getDatabase(getApplication()).parkingDao().saveConfig(updatedConfig)
+            }
+        }
+    }
+
+    fun startCustomSession(
+        initialBalance: Double,
+        timestamp: Long = System.currentTimeMillis(),
+        photoPath: String = ""
+    ) {
         viewModelScope.launch {
             if (initialBalance >= 0.0) {
                 repository.setBalance(initialBalance)
             }
             val configBefore = repository.getOrCreateConfig()
             val startBalance = configBefore.balance
-            val started = repository.startSession(now = timestamp)
+            val effectivePhoto = if (photoPath.isNotBlank()) {
+                photoPath
+            } else {
+                _uiState.value.capturedPhotoPath ?: configBefore.lastSessionPhotoPath
+            }
+            val started = repository.startSession(now = timestamp, photoPath = effectivePhoto)
             if (!started) {
                 _uiState.update { it.copy(showNoFundsToStartAlert = true) }
             } else {

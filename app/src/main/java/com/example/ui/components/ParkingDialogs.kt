@@ -86,6 +86,15 @@ import com.example.ui.theme.ErrorRed
 import com.example.ui.theme.SlateBlue
 import com.example.ui.theme.WarningAmber
 import com.example.util.SecurityManager
+import com.example.util.PhotoStorageManager
+import com.example.data.ParkingHistoryItem
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.material.icons.filled.Restore
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -2304,6 +2313,154 @@ fun QuickTileInstructionsDialog(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Cerrar", color = Color(0xFF475569))
+            }
+        }
+    )
+}
+
+@Composable
+fun ConfirmResumeSessionDialog(
+    item: ParkingHistoryItem,
+    isSessionActive: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    val dateFormat = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
+    val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
+    val initialBalance = if (item.initialBalance > 0.0) item.initialBalance else item.costCharged
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        icon = {
+            Surface(
+                shape = CircleShape,
+                color = SlateBlue.copy(alpha = 0.12f),
+                modifier = Modifier.size(44.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Default.Restore,
+                        contentDescription = "Reanudar Sesión",
+                        tint = SlateBlue,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+        },
+        title = {
+            Text(
+                "¿Reanudar Sesión de Parqueo?",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF0F172A)
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Esta sesión finalizada se reactivará para continuar como tu ingreso actual:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF334155)
+                )
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFF8FAFC),
+                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "• Fecha y hora: ${dateFormat.format(Date(item.startTimestamp))} ${timeFormat.format(Date(item.startTimestamp))}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF0F172A),
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "• Saldo inicial registrado: $${String.format(Locale.US, "%.2f", initialBalance)} USD",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = SlateBlue
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "• Costo previo registrado: $${String.format(Locale.US, "%.2f", item.costCharged)} USD",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF64748B)
+                            )
+                        }
+
+                        if (item.photoPath.isNotBlank()) {
+                            val bitmap = remember(item.photoPath) {
+                                PhotoStorageManager.loadPhotoFromInternalStorage(item.photoPath)
+                            }
+                            if (bitmap != null) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Image(
+                                    bitmap = bitmap.asImageBitmap(),
+                                    contentDescription = "Foto de Sesión",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(50.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .border(1.dp, SlateBlue.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (isSessionActive) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFFFFBEB),
+                        border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "⚠️ Aviso: Hay una sesión activa. Al confirmar, la sesión actual se finalizará para reanudar esta.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF92400E),
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                }
+
+                Text(
+                    text = "🔒 Se requiere autenticación para confirmar esta acción.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF64748B),
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(containerColor = SlateBlue),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.testTag("confirm_resume_session_button")
+            ) {
+                Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Autenticar y Reanudar", color = Color.White)
+            }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.testTag("cancel_resume_session_button")
+            ) {
+                Text("Cancelar", color = Color(0xFF475569))
             }
         }
     )

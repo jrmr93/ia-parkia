@@ -28,4 +28,7 @@ interface ParkingDao {
 
     @Query("DELETE FROM parking_history")
     suspend fun clearAllHistory()
+
+    @Query("DELETE FROM parking_history WHERE id = :id")
+    suspend fun deleteHistoryItem(id: Long)
 }
