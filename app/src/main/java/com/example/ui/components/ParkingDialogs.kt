@@ -1719,6 +1719,7 @@ fun ConfirmStartSessionDialog(
 fun ConfirmStopSessionDialog(
     elapsedSeconds: Long,
     accumulatedCost: Double,
+    initialBalance: Double = 0.0,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
@@ -1726,6 +1727,7 @@ fun ConfirmStopSessionDialog(
     val minutes = (elapsedSeconds % 3600) / 60
     val seconds = elapsedSeconds % 60
     val timeFormatted = String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
+    val isDebt = accumulatedCost > initialBalance
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1755,8 +1757,8 @@ fun ConfirmStopSessionDialog(
                 Spacer(modifier = Modifier.height(10.dp))
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFFF8FAFC),
-                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                    color = if (isDebt) Color(0xFFFFF1F2) else Color(0xFFF8FAFC),
+                    border = BorderStroke(1.dp, if (isDebt) ErrorRed.copy(alpha = 0.5f) else Color(0xFFE2E8F0)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
@@ -1769,9 +1771,18 @@ fun ConfirmStopSessionDialog(
                         Text(
                             text = "• Cobro total: $${String.format(Locale.US, "%.2f", accumulatedCost)} USD",
                             style = MaterialTheme.typography.bodySmall,
-                            color = SlateBlue,
+                            color = if (isDebt) ErrorRed else SlateBlue,
                             fontWeight = FontWeight.Bold
                         )
+                        if (isDebt) {
+                            val debt = accumulatedCost - initialBalance
+                            Text(
+                                text = "• Total adeudado al salir: $${String.format(Locale.US, "%.2f", debt)} USD",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = ErrorRed,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }

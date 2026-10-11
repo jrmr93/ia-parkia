@@ -275,10 +275,11 @@ fun HistoryCard(
 
             // Sesión de parqueo activa mostrada en el registro de sesiones
             if (isSessionActive) {
+                val isDebt = accumulatedCost > sessionInitialBalance
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = Color(0xFFEFF6FF), // Light Blue tint
-                    border = BorderStroke(1.5.dp, SlateBlue.copy(alpha = pulseAlpha)),
+                    color = if (isDebt) Color(0xFFFFF1F2) else Color(0xFFEFF6FF), // Light red or blue tint
+                    border = BorderStroke(1.5.dp, if (isDebt) ErrorRed.copy(alpha = pulseAlpha) else SlateBlue.copy(alpha = pulseAlpha)),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("active_session_history_item")
@@ -299,7 +300,7 @@ fun HistoryCard(
                                         modifier = Modifier
                                             .size(8.dp)
                                             .clip(CircleShape)
-                                            .background(SlateBlue)
+                                            .background(if (isDebt) ErrorRed else SlateBlue)
                                             .alpha(pulseAlpha)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
@@ -307,17 +308,17 @@ fun HistoryCard(
                                         text = dateFormat.format(Date(sessionStartTimestamp)),
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF1E3A8A)
+                                        color = if (isDebt) ErrorRed else Color(0xFF1E3A8A)
                                     )
                                 }
 
                                 Surface(
                                     shape = RoundedCornerShape(8.dp),
-                                    color = SlateBlue.copy(alpha = 0.15f)
+                                    color = if (isDebt) ErrorRed.copy(alpha = 0.15f) else SlateBlue.copy(alpha = 0.15f)
                                 ) {
                                     Text(
-                                        text = "SESIÓN EN CURSO",
-                                        color = SlateBlue,
+                                        text = if (isDebt) "SESIÓN EN DEUDA" else "SESIÓN EN CURSO",
+                                        color = if (isDebt) ErrorRed else SlateBlue,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
@@ -339,7 +340,7 @@ fun HistoryCard(
                                     Icon(
                                         Icons.Default.AccessTime,
                                         contentDescription = null,
-                                        tint = SlateBlue,
+                                        tint = if (isDebt) ErrorRed else SlateBlue,
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
@@ -356,7 +357,7 @@ fun HistoryCard(
                                     text = String.format(Locale.US, "$%.2f USD", accumulatedCost),
                                     style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = SlateBlue,
+                                    color = if (isDebt) ErrorRed else SlateBlue,
                                     fontFamily = FontFamily.Monospace
                                 )
                             }
@@ -378,12 +379,23 @@ fun HistoryCard(
                                     color = Color(0xFF475569),
                                     fontSize = 11.sp
                                 )
-                                Text(
-                                    text = "Saldo inicial: $${String.format(Locale.US, "%.2f", sessionInitialBalance)} USD",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF64748B),
-                                    fontSize = 10.sp
-                                )
+                                if (isDebt) {
+                                    val currentDebt = accumulatedCost - sessionInitialBalance
+                                    Text(
+                                        text = "Deuda actual: -$${String.format(Locale.US, "%.2f", currentDebt)} USD",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = ErrorRed,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp
+                                    )
+                                } else {
+                                    Text(
+                                        text = "Saldo inicial: $${String.format(Locale.US, "%.2f", sessionInitialBalance)} USD",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFF64748B),
+                                        fontSize = 10.sp
+                                    )
+                                }
                             }
                         }
 

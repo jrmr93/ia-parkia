@@ -67,8 +67,13 @@ object TtsManager {
     }
 
     fun announceSessionStop(context: Context, remainingBalance: Double, enabled: Boolean = true) {
-        val formatted = String.format(Locale.US, "%.2f", remainingBalance)
-        val text = "Usted termina con $formatted dólares"
+        val text = if (remainingBalance < -0.0001) {
+            val debt = String.format(Locale.US, "%.2f", -remainingBalance)
+            "Usted termina con una deuda de $debt dólares"
+        } else {
+            val formatted = String.format(Locale.US, "%.2f", remainingBalance)
+            "Usted termina con $formatted dólares"
+        }
         speak(context, text)
     }
 

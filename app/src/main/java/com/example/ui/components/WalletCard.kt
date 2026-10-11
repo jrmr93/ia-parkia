@@ -58,6 +58,7 @@ fun WalletCard(
     onOpenCustomRecharge: () -> Unit,
     onOpenResetBalance: () -> Unit
 ) {
+    val isDebt = balance < -0.0001
     val isExhausted = balance <= 0.0001
 
     Card(
@@ -151,15 +152,20 @@ fun WalletCard(
             ) {
                 Column {
                     Text(
-                        text = "SALDO DISPONIBLE",
+                        text = if (isDebt) "DEUDA PENDIENTE" else "SALDO DISPONIBLE",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF64748B),
+                        color = if (isDebt) ErrorRed else Color(0xFF64748B),
                         letterSpacing = 1.sp
                     )
                     Spacer(modifier = Modifier.height(2.dp))
+                    val balanceFormatted = if (isDebt) {
+                        String.format(java.util.Locale.US, "-$%.2f", -balance)
+                    } else {
+                        String.format(java.util.Locale.US, "$%.2f", balance)
+                    }
                     Text(
-                        text = String.format(java.util.Locale.US, "$%.2f", balance),
+                        text = balanceFormatted,
                         style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.ExtraBold,
                         color = if (isExhausted) ErrorRed else Color(0xFF0F172A),
@@ -171,6 +177,7 @@ fun WalletCard(
                 Surface(
                     shape = RoundedCornerShape(20.dp),
                     color = when {
+                        isDebt -> ErrorRed.copy(alpha = 0.15f)
                         isExhausted -> ErrorRed.copy(alpha = 0.12f)
                         isLowBalance -> WarningAmber.copy(alpha = 0.12f)
                         else -> SuccessEmerald.copy(alpha = 0.12f)
@@ -178,6 +185,7 @@ fun WalletCard(
                     border = BorderStroke(
                         1.dp,
                         when {
+                            isDebt -> ErrorRed
                             isExhausted -> ErrorRed.copy(alpha = 0.6f)
                             isLowBalance -> WarningAmber.copy(alpha = 0.6f)
                             else -> SuccessEmerald.copy(alpha = 0.6f)
@@ -206,6 +214,7 @@ fun WalletCard(
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = when {
+                                isDebt -> "En Deuda: $${String.format(java.util.Locale.US, "%.2f", -balance)}"
                                 isExhausted -> "Saldo Agotado"
                                 isLowBalance -> "Saldo Bajo"
                                 else -> "Saldo Óptimo"
@@ -246,13 +255,13 @@ fun WalletCard(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = "Equivalencia para parqueo continuo:",
+                            text = if (isDebt) "Deuda acumulada por pagar:" else "Equivalencia para parqueo continuo:",
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF64748B),
+                            color = if (isDebt) ErrorRed else Color(0xFF64748B),
                             fontSize = 11.sp
                         )
                         Text(
-                            text = availableTimeFormatted,
+                            text = if (isDebt) "Debe pagar $${String.format(java.util.Locale.US, "%.2f", -balance)} USD al salir" else availableTimeFormatted,
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                             color = if (isExhausted) ErrorRed else Color(0xFF0F172A)
@@ -271,8 +280,8 @@ fun WalletCard(
                     Spacer(modifier = Modifier.height(10.dp))
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = Color(0xFFFEF3C7),
-                        border = BorderStroke(1.dp, WarningAmber.copy(alpha = 0.6f)),
+                        color = if (isDebt) Color(0xFFFEE2E2) else Color(0xFFFEF3C7),
+                        border = BorderStroke(1.dp, if (isDebt) ErrorRed.copy(alpha = 0.6f) else WarningAmber.copy(alpha = 0.6f)),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("wallet_estimated_exhaustion_card")
@@ -286,15 +295,15 @@ fun WalletCard(
                             Icon(
                                 Icons.Default.HourglassBottom,
                                 contentDescription = "Agotamiento estimado",
-                                tint = Color(0xFFB45309),
+                                tint = if (isDebt) ErrorRed else Color(0xFFB45309),
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = "Fecha y hora estimada de agotamiento:",
+                                    text = if (isDebt) "Estado de fondos de la sesión:" else "Fecha y hora estimada de agotamiento:",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF78350F),
+                                    color = if (isDebt) Color(0xFF991B1B) else Color(0xFF78350F),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium
                                 )
@@ -302,7 +311,7 @@ fun WalletCard(
                                     text = estimatedExhaustion ?: "",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = Color(0xFF92400E)
+                                    color = if (isDebt) ErrorRed else Color(0xFF92400E)
                                 )
                             }
                         }
@@ -310,8 +319,17 @@ fun WalletCard(
                 }
             }
 
-            // Warning notes if low or exhausted
-            if (isExhausted) {
+            // Warning notes if in debt, low or exhausted
+            if (isDebt) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "⚠️ Saldo en negativo: tienes una deuda de $${String.format(java.util.Locale.US, "%.2f", -balance)} USD. Se debe pagar al salir o recargar para saldar la deuda.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ErrorRed,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
+                )
+            } else if (isExhausted) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "⚠️ Tu saldo es $0.00 USD. Ingresa el valor a recargar por teclado.",

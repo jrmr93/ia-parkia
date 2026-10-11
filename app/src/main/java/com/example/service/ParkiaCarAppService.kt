@@ -199,17 +199,23 @@ class ParkiaCarScreen(carContext: CarContext) : Screen(carContext) {
         }
         canvas.drawRoundRect(3f, 3f, (width - 3).toFloat(), (height - 3).toFloat(), 32f, 32f, borderPaint)
 
-        // Header: "SALDO ACTUAL"
+        val isDebt = balance < -0.0001
+        // Header: "SALDO ACTUAL" or "DEUDA ACTUAL"
         val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#444444")
+            color = if (isDebt) Color.parseColor("#DC2626") else Color.parseColor("#444444")
             textSize = 28f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             textAlign = Paint.Align.CENTER
         }
-        canvas.drawText("SALDO ACTUAL", width / 2f, 65f, labelPaint)
+        val headerTitle = if (isDebt) "DEUDA ACTUAL" else "SALDO ACTUAL"
+        canvas.drawText(headerTitle, width / 2f, 65f, labelPaint)
 
-        // GIGANTIC Centered Balance: "$15.50"
-        val balanceStr = String.format(Locale.US, "\$%.2f", balance)
+        // GIGANTIC Centered Balance: "$15.50" or "-$2.50"
+        val balanceStr = if (isDebt) {
+            String.format(Locale.US, "-\$%.2f", -balance)
+        } else {
+            String.format(Locale.US, "\$%.2f", balance)
+        }
         val fontSize = when {
             balanceStr.length > 7 -> 95f
             balanceStr.length > 6 -> 110f
@@ -217,17 +223,26 @@ class ParkiaCarScreen(carContext: CarContext) : Screen(carContext) {
         }
 
         val balancePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.BLACK
+            color = if (isDebt) Color.parseColor("#DC2626") else Color.BLACK
             textSize = fontSize
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             textAlign = Paint.Align.CENTER
         }
         canvas.drawText(balanceStr, width / 2f, 205f, balancePaint)
 
-        // Bottom Status Badge: 🟢 SESIÓN ACTIVA or ⚪ PARQUEO DETENIDO
-        val statusText = if (isSessionActive) "🟢 SESIÓN ACTIVA" else "⚪ PARQUEO DETENIDO"
+        // Bottom Status Badge: 🔴 SESIÓN EN DEUDA / 🟢 SESIÓN ACTIVA or ⚪ PARQUEO DETENIDO
+        val statusText = when {
+            isSessionActive && isDebt -> "🔴 SESIÓN EN DEUDA"
+            isSessionActive -> "🟢 SESIÓN ACTIVA"
+            isDebt -> "🔴 EN DEUDA (POR PAGAR)"
+            else -> "⚪ PARQUEO DETENIDO"
+        }
         val statusPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = if (isSessionActive) Color.parseColor("#2E7D32") else Color.parseColor("#666666")
+            color = when {
+                isDebt -> Color.parseColor("#DC2626")
+                isSessionActive -> Color.parseColor("#2E7D32")
+                else -> Color.parseColor("#666666")
+            }
             textSize = 26f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             textAlign = Paint.Align.CENTER

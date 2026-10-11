@@ -41,7 +41,16 @@ class ParkingRepository(private val dao: ParkingDao) {
      * Calculated in blocks of continuous time:
      * e.g. "2d 4h 0m", "1h 30m", "45m", "0m"
      */
+    /**
+     * Formats available time based on current balance and rate.
+     * Calculated in blocks of continuous time:
+     * e.g. "2d 4h 0m", "1h 30m", "45m", "0m"
+     */
     fun calculateAvailableTime(balance: Double, rateAmount: Double, rateMinutes: Int): String {
+        if (balance < -0.0001) {
+            val debt = -balance
+            return "0m (Deuda: $${String.format(java.util.Locale.US, "%.2f", debt)} USD)"
+        }
         if (balance < rateAmount || rateAmount <= 0.0) {
             return "0m (Sin saldo para 1 bloque)"
         }
@@ -74,7 +83,7 @@ class ParkingRepository(private val dao: ParkingDao) {
      * ONLY relevant when session is active!
      */
     fun calculateEstimatedExhaustionMs(config: ParkingConfig): Long? {
-        if (!config.isSessionActive || config.rateAmount <= 0.0) return null
+        if (!config.isSessionActive || config.rateAmount <= 0.0 || config.sessionInitialBalance <= 0.0) return null
         val totalBlocksAffordable = Math.floor(config.sessionInitialBalance / config.rateAmount + 0.0001).toLong()
         if (totalBlocksAffordable <= 0L) return null
         val affordableSeconds = totalBlocksAffordable * (config.rateMinutes * 60L)
@@ -83,7 +92,7 @@ class ParkingRepository(private val dao: ParkingDao) {
 
     /**
      * Catch-up session logic for background/suspend state.
-     * Returns true if session ended due to balance exhaustion.
+     * Keeps session running continuously into negative balance (debt) without stopping.
      */
     suspend fun catchUpSession(now: Long = System.currentTimeMillis()): Boolean = withContext(Dispatchers.IO) {
         val config = getOrCreateConfig()
@@ -92,111 +101,43 @@ class ParkingRepository(private val dao: ParkingDao) {
         }
 
         val elapsed = max(0L, (now - config.sessionStartTimestamp) / 1000L)
-        val blockDuration = (config.rateMinutes * 60L).coerceAtLeast(60L)
-        val maxBlocks = Math.floor(config.sessionInitialBalance / config.rateAmount + 0.0001).toLong()
-        val maxDurationSeconds = maxBlocks * blockDuration
+        val blocks = calculateBlocks(elapsed, config.rateMinutes)
+        val currentCost = blocks * config.rateAmount
+        val currentBalance = config.sessionInitialBalance - currentCost
 
-        if (maxBlocks <= 0 || elapsed >= maxDurationSeconds) {
-            // Balance depleted!
-            val actualEndTimestamp = config.sessionStartTimestamp + (maxDurationSeconds * 1000L)
-            val costCharged = maxBlocks * config.rateAmount
-            val remainingBalance = max(0.0, config.sessionInitialBalance - costCharged)
-
-            dao.insertHistory(
-                ParkingHistoryItem(
-                    startTimestamp = config.sessionStartTimestamp,
-                    endTimestamp = actualEndTimestamp,
-                    durationSeconds = max(1L, maxDurationSeconds),
-                    costCharged = costCharged,
-                    reasonEnded = "Saldo Agotado"
-                )
+        dao.saveConfig(
+            config.copy(
+                balance = currentBalance,
+                elapsedSeconds = elapsed,
+                accumulatedCost = currentCost,
+                lastProcessedTimestamp = now
             )
-
-            dao.saveConfig(
-                config.copy(
-                    balance = remainingBalance,
-                    isSessionActive = false,
-                    lastSessionEndTimestamp = actualEndTimestamp,
-                    lastSessionExitBalance = remainingBalance,
-                    lastSessionDurationSeconds = max(1L, maxDurationSeconds),
-                    lastProcessedTimestamp = now,
-                    elapsedSeconds = 0L,
-                    accumulatedCost = 0.0
-                )
-            )
-            return@withContext true
-        } else {
-            val blocks = calculateBlocks(elapsed, config.rateMinutes)
-            val currentCost = blocks * config.rateAmount
-            val currentBalance = max(0.0, config.sessionInitialBalance - currentCost)
-
-            dao.saveConfig(
-                config.copy(
-                    balance = currentBalance,
-                    elapsedSeconds = elapsed,
-                    accumulatedCost = currentCost,
-                    lastProcessedTimestamp = now
-                )
-            )
-            return@withContext false
-        }
+        )
+        return@withContext false
     }
 
     /**
      * Advances time by 1 second during active session.
+     * Keeps session running continuously into negative balance (debt) without stopping.
      */
     suspend fun advanceOneSecond(now: Long = System.currentTimeMillis()): Boolean = withContext(Dispatchers.IO) {
         val config = getOrCreateConfig()
         if (!config.isSessionActive) return@withContext false
 
         val elapsed = max(0L, (now - config.sessionStartTimestamp) / 1000L)
-        val blockDuration = (config.rateMinutes * 60L).coerceAtLeast(60L)
-        val maxBlocks = Math.floor(config.sessionInitialBalance / config.rateAmount + 0.0001).toLong()
-        val maxDurationSeconds = maxBlocks * blockDuration
+        val blocks = calculateBlocks(elapsed, config.rateMinutes)
+        val currentCost = blocks * config.rateAmount
+        val currentBalance = config.sessionInitialBalance - currentCost
 
-        if (maxBlocks <= 0 || elapsed >= maxDurationSeconds) {
-            val actualEndTimestamp = config.sessionStartTimestamp + (maxDurationSeconds * 1000L)
-            val costCharged = maxBlocks * config.rateAmount
-            val remainingBalance = max(0.0, config.sessionInitialBalance - costCharged)
-
-            dao.insertHistory(
-                ParkingHistoryItem(
-                    startTimestamp = config.sessionStartTimestamp,
-                    endTimestamp = actualEndTimestamp,
-                    durationSeconds = max(1L, maxDurationSeconds),
-                    costCharged = costCharged,
-                    reasonEnded = "Saldo Agotado"
-                )
+        dao.saveConfig(
+            config.copy(
+                balance = currentBalance,
+                elapsedSeconds = elapsed,
+                accumulatedCost = currentCost,
+                lastProcessedTimestamp = now
             )
-
-            dao.saveConfig(
-                config.copy(
-                    balance = remainingBalance,
-                    isSessionActive = false,
-                    lastSessionEndTimestamp = actualEndTimestamp,
-                    lastSessionExitBalance = remainingBalance,
-                    lastSessionDurationSeconds = max(1L, maxDurationSeconds),
-                    lastProcessedTimestamp = now,
-                    elapsedSeconds = 0L,
-                    accumulatedCost = 0.0
-                )
-            )
-            return@withContext true
-        } else {
-            val blocks = calculateBlocks(elapsed, config.rateMinutes)
-            val currentCost = blocks * config.rateAmount
-            val currentBalance = max(0.0, config.sessionInitialBalance - currentCost)
-
-            dao.saveConfig(
-                config.copy(
-                    balance = currentBalance,
-                    elapsedSeconds = elapsed,
-                    accumulatedCost = currentCost,
-                    lastProcessedTimestamp = now
-                )
-            )
-            return@withContext false
-        }
+        )
+        return@withContext false
     }
 
     /**
@@ -215,7 +156,7 @@ class ParkingRepository(private val dao: ParkingDao) {
 
         val initialBalance = config.balance
         val firstBlockCost = config.rateAmount
-        val remainingBalance = max(0.0, initialBalance - firstBlockCost)
+        val remainingBalance = initialBalance - firstBlockCost
 
         val updatedPhotoPath = if (photoPath.isNotBlank()) photoPath else config.lastSessionPhotoPath
 
@@ -236,6 +177,7 @@ class ParkingRepository(private val dao: ParkingDao) {
 
     /**
      * Stops session and charges full blocks.
+     * Does not clamp to 0; remaining balance reflects negative debt if initial balance was exceeded.
      */
     suspend fun stopSession(now: Long = System.currentTimeMillis(), reason: String = "Finalizado por usuario") = withContext(Dispatchers.IO) {
         val config = getOrCreateConfig()
@@ -244,7 +186,7 @@ class ParkingRepository(private val dao: ParkingDao) {
         val elapsed = max(0L, (now - config.sessionStartTimestamp) / 1000L)
         val blocks = calculateBlocks(elapsed, config.rateMinutes)
         val finalCost = blocks * config.rateAmount
-        val remainingBalance = max(0.0, config.sessionInitialBalance - finalCost)
+        val remainingBalance = config.sessionInitialBalance - finalCost
 
         dao.insertHistory(
             ParkingHistoryItem(
@@ -275,7 +217,7 @@ class ParkingRepository(private val dao: ParkingDao) {
 
     /**
      * Modifies the active session's entry timestamp AND initial balance,
-     * automatically recalculating all costs, elapsed time and remaining balance.
+     * automatically recalculating all costs, elapsed time and remaining balance without stopping.
      */
     suspend fun updateActiveSession(
         newStartTimestamp: Long,
@@ -287,58 +229,21 @@ class ParkingRepository(private val dao: ParkingDao) {
 
         val validStart = if (newStartTimestamp > now) now else newStartTimestamp
         val elapsed = max(0L, (now - validStart) / 1000L)
-        val blockDuration = (config.rateMinutes * 60L).coerceAtLeast(60L)
-        val maxBlocks = Math.floor(newInitialBalance / config.rateAmount + 0.0001).toLong()
-        val maxDurationSeconds = maxBlocks * blockDuration
+        val blocks = calculateBlocks(elapsed, config.rateMinutes)
+        val cost = blocks * config.rateAmount
+        val newRemainingBalance = newInitialBalance - cost
 
-        if (maxBlocks <= 0 || elapsed >= maxDurationSeconds) {
-            // Depleted with the new initial balance / time
-            val actualEndTimestamp = validStart + (maxDurationSeconds * 1000L)
-            val costCharged = maxBlocks * config.rateAmount
-            val remainingBalance = max(0.0, newInitialBalance - costCharged)
-
-            dao.insertHistory(
-                ParkingHistoryItem(
-                    startTimestamp = validStart,
-                    endTimestamp = actualEndTimestamp,
-                    durationSeconds = max(1L, maxDurationSeconds),
-                    costCharged = costCharged,
-                    reasonEnded = "Saldo Agotado"
-                )
+        dao.saveConfig(
+            config.copy(
+                balance = newRemainingBalance,
+                sessionStartTimestamp = validStart,
+                sessionInitialBalance = newInitialBalance,
+                elapsedSeconds = elapsed,
+                accumulatedCost = cost,
+                lastProcessedTimestamp = now
             )
-
-            dao.saveConfig(
-                config.copy(
-                    balance = remainingBalance,
-                    isSessionActive = false,
-                    sessionStartTimestamp = 0L,
-                    sessionInitialBalance = 0.0,
-                    lastSessionEndTimestamp = actualEndTimestamp,
-                    lastSessionExitBalance = remainingBalance,
-                    lastSessionDurationSeconds = max(1L, maxDurationSeconds),
-                    lastProcessedTimestamp = now,
-                    elapsedSeconds = 0L,
-                    accumulatedCost = 0.0
-                )
-            )
-            return@withContext true
-        } else {
-            val blocks = calculateBlocks(elapsed, config.rateMinutes)
-            val cost = blocks * config.rateAmount
-            val newRemainingBalance = max(0.0, newInitialBalance - cost)
-
-            dao.saveConfig(
-                config.copy(
-                    balance = newRemainingBalance,
-                    sessionStartTimestamp = validStart,
-                    sessionInitialBalance = newInitialBalance,
-                    elapsedSeconds = elapsed,
-                    accumulatedCost = cost,
-                    lastProcessedTimestamp = now
-                )
-            )
-            return@withContext false
-        }
+        )
+        return@withContext false
     }
 
     suspend fun rechargeBalance(amount: Double) = withContext(Dispatchers.IO) {

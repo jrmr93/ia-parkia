@@ -295,10 +295,11 @@ fun ParkingBayCard(
 
                         // Cost
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            val isDebt = isSessionActive && (accumulatedCost > sessionInitialBalance)
                             Text(
-                                text = "COSTO DE BLOQUE(S)",
+                                text = if (isDebt) "COSTO (EN DEUDA)" else "COSTO DE BLOQUE(S)",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF64748B),
+                                color = if (isDebt) ErrorRed else Color(0xFF64748B),
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
@@ -307,7 +308,7 @@ fun ParkingBayCard(
                                 text = String.format(Locale.US, "$%.2f USD", accumulatedCost),
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isSessionActive) statusColor else Color(0xFF0F172A),
+                                color = if (isDebt) ErrorRed else if (isSessionActive) statusColor else Color(0xFF0F172A),
                                 fontFamily = FontFamily.Monospace,
                                 modifier = Modifier.testTag("session_cost_display")
                             )
@@ -317,10 +318,11 @@ fun ParkingBayCard(
                     // Active session info + REQUIRED: Modify button back in active session panel
                     if (isSessionActive) {
                         Spacer(modifier = Modifier.height(12.dp))
+                        val isDebt = accumulatedCost > sessionInitialBalance
                         Surface(
                             shape = RoundedCornerShape(10.dp),
-                            color = Color.White,
-                            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                            color = if (isDebt) Color(0xFFFFF1F2) else Color.White,
+                            border = BorderStroke(1.dp, if (isDebt) ErrorRed.copy(alpha = 0.5f) else Color(0xFFE2E8F0)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
@@ -341,12 +343,23 @@ fun ParkingBayCard(
                                         fontFamily = FontFamily.Monospace,
                                         fontSize = 11.sp
                                     )
-                                    Text(
-                                        text = "Saldo inicial: $${String.format(Locale.US, "%.2f", sessionInitialBalance)} USD",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFF64748B),
-                                        fontSize = 10.sp
-                                    )
+                                    if (isDebt) {
+                                        val currentDebt = accumulatedCost - sessionInitialBalance
+                                        Text(
+                                            text = "Saldo inicial: $${String.format(Locale.US, "%.2f", sessionInitialBalance)} • Deuda: -$${String.format(Locale.US, "%.2f", currentDebt)} USD",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = ErrorRed,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 10.sp
+                                        )
+                                    } else {
+                                        Text(
+                                            text = "Saldo inicial: $${String.format(Locale.US, "%.2f", sessionInitialBalance)} USD",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFF64748B),
+                                            fontSize = 10.sp
+                                        )
+                                    }
                                 }
 
                                 OutlinedButton(

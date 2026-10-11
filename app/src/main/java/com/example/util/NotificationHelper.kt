@@ -43,8 +43,19 @@ object NotificationHelper {
         isSessionActive: Boolean,
         formattedDateTime: String
     ): Notification {
-        val stateText = if (isSessionActive) "En Sesión Activa" else "En Reposo"
-        val balanceText = String.format(Locale.US, "$%.2f USD", balance)
+        val isDebt = balance < -0.0001
+        val stateText = when {
+            isSessionActive && isDebt -> "En Sesión Activa (En Deuda)"
+            isSessionActive -> "En Sesión Activa"
+            isDebt -> "En Reposo (Deuda Pendiente)"
+            else -> "En Reposo"
+        }
+        val balanceText = if (isDebt) {
+            String.format(Locale.US, "-$%.2f USD", -balance)
+        } else {
+            String.format(Locale.US, "$%.2f USD", balance)
+        }
+        val titleText = if (isDebt) "Parkia - Deuda: $balanceText" else "Parkia - Saldo: $balanceText"
 
         val intent = android.content.Intent(context, com.example.MainActivity::class.java).apply {
             flags = android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -58,7 +69,7 @@ object NotificationHelper {
 
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_car)
-            .setContentTitle("Parkia - Saldo: $balanceText")
+            .setContentTitle(titleText)
             .setContentText("Actualizado: $formattedDateTime • $stateText")
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)

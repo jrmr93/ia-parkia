@@ -347,4 +347,59 @@ class ExampleRobolectricTest {
         NotificationHelper.showGeofenceNotification(context, isSessionActive = false)
         NotificationHelper.showGeofenceNotification(context, isSessionActive = true)
     }
+
+    @Test
+    fun `session keeps running into negative balance when initial balance runs out and does not auto-terminate`() = runBlocking {
+        // Start session with $0.10 (only 1 block of 30 min at $0.10)
+        repository.rechargeBalance(0.10)
+        val startTime = 10000000L
+        val started = repository.startSession(startTime)
+        assertTrue(started)
+
+        // Advance to 65 minutes (3900 seconds -> 3 blocks of 30 min = $0.30 cost)
+        val currentTime = startTime + (3900 * 1000L)
+        val depleted = repository.catchUpSession(currentTime)
+
+        // Must NOT be depleted/stopped!
+        assertFalse("Session should NOT stop when balance runs out", depleted)
+
+        val config = repository.getOrCreateConfig()
+        assertTrue("Session must remain active", config.isSessionActive)
+        assertEquals(3900L, config.elapsedSeconds)
+        assertEquals(0.30, config.accumulatedCost, 0.001)
+        // Initial balance $0.10 - cost $0.30 = -$0.20 (debt of $0.20)
+        assertEquals(-0.20, config.balance, 0.001)
+
+        // Available time should indicate debt
+        val availableTime = repository.calculateAvailableTime(config.balance, config.rateAmount, config.rateMinutes)
+        assertTrue("Available time should show debt", availableTime.contains("Deuda: $0.20 USD"))
+    }
+
+    @Test
+    fun `stopping session in negative balance retains debt and does not clamp to zero`() = runBlocking {
+        repository.rechargeBalance(0.10)
+        val startTime = 10000000L
+        repository.startSession(startTime)
+
+        // Stop session after 65 minutes (3 blocks = $0.30 cost)
+        val stopTime = startTime + (3900 * 1000L)
+        repository.stopSession(stopTime, "Finalizado por usuario")
+
+        val config = repository.getOrCreateConfig()
+        assertFalse(config.isSessionActive)
+        // Balance remains negative debt: 0.10 - 0.30 = -0.20
+        assertEquals(-0.20, config.balance, 0.001)
+        assertEquals(-0.20, config.lastSessionExitBalance, 0.001)
+
+        val history = repository.historyFlow.first()
+        assertEquals(1, history.size)
+        assertEquals(0.30, history[0].costCharged, 0.001)
+        assertEquals(3900L, history[0].durationSeconds)
+        assertEquals("Finalizado por usuario", history[0].reasonEnded)
+
+        // Recharging $1.00 clears debt: -0.20 + 1.00 = +0.80
+        repository.rechargeBalance(1.00)
+        val configAfterRecharge = repository.getOrCreateConfig()
+        assertEquals(0.80, configAfterRecharge.balance, 0.001)
+    }
 }

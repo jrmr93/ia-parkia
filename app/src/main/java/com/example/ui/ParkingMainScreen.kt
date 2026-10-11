@@ -220,6 +220,7 @@ fun ParkingMainScreen(
         ConfirmStopSessionDialog(
             elapsedSeconds = uiState.config.elapsedSeconds,
             accumulatedCost = uiState.config.accumulatedCost,
+            initialBalance = uiState.config.sessionInitialBalance,
             onDismiss = { viewModel.dismissConfirmStopDialog() },
             onConfirm = { viewModel.confirmStopSession() }
         )

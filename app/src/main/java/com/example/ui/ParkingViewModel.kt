@@ -69,10 +69,7 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             val initial = repository.getOrCreateConfig()
             _uiState.update { it.copy(config = initial) }
-            val depleted = repository.catchUpSession()
-            if (depleted) {
-                _uiState.update { it.copy(showExhaustedBalanceAlert = true) }
-            }
+            repository.catchUpSession()
             recalculateDerivedValues()
             if (initial.notificationsEnabled) {
                 com.example.service.ParkiaForegroundService.startOrUpdate(getApplication(), forceUpdate = false)
@@ -128,10 +125,7 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
      */
     fun onAppResume() {
         viewModelScope.launch {
-            val depleted = repository.catchUpSession()
-            if (depleted) {
-                _uiState.update { it.copy(showExhaustedBalanceAlert = true) }
-            }
+            repository.catchUpSession()
             recalculateDerivedValues()
             postRealtimeNotification()
         }
@@ -153,12 +147,7 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
         activeTickerJob = viewModelScope.launch {
             while (isActive) {
                 delay(1000L)
-                val depleted = repository.advanceOneSecond()
-                if (depleted) {
-                    _uiState.update { it.copy(showExhaustedBalanceAlert = true) }
-                    postRealtimeNotification()
-                    break
-                }
+                repository.advanceOneSecond()
                 recalculateDerivedValues()
             }
         }
@@ -180,7 +169,17 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
         // Estimated exhaustion date/time: calculated ONLY when session is active!
         val estimatedExhaustion = if (config.isSessionActive) {
             val exhaustionMs = repository.calculateEstimatedExhaustionMs(config)
-            exhaustionMs?.let { friendlyDateFormat.format(Date(it)) }
+            if (exhaustionMs != null) {
+                if (System.currentTimeMillis() >= exhaustionMs) {
+                    "Saldo agotado (${friendlyDateFormat.format(Date(exhaustionMs))}) • En deuda"
+                } else {
+                    friendlyDateFormat.format(Date(exhaustionMs))
+                }
+            } else if (config.balance < -0.0001) {
+                "En deuda • Saldo agotado"
+            } else {
+                null
+            }
         } else {
             null
         }
