@@ -306,6 +306,13 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun deleteHistoryItem(item: ParkingHistoryItem) {
+        viewModelScope.launch {
+            repository.deleteHistoryRecord(item)
+            recalculateDerivedValues()
+        }
+    }
+
     /**
      * Toggles session state when an NFC tag is detected.
      * Validates registered tag if strict matching is enabled.
@@ -711,7 +718,7 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
             com.example.service.ParkiaForegroundService.stop(app)
             com.example.util.BalanceAlarmScheduler.scheduleOrCancel(app, false, effectiveConfig.notificationIntervalMinutes)
             com.example.util.BalanceNotificationWorker.scheduleOrCancel(app, false, effectiveConfig.notificationIntervalMinutes)
-            androidx.core.app.NotificationManagerCompat.from(app).cancel(com.example.util.NotificationHelper.NOTIFICATION_ID)
+            com.example.util.NotificationHelper.cancelBalanceNotification(app)
         }
 
         // 6. Actualizar Mosaico de Ajustes Rápidos (Quick Settings Tile)

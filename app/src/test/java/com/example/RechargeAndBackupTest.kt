@@ -272,4 +272,189 @@ class RechargeAndBackupTest {
         assertEquals(false, com.example.util.SecurityManager.isQuickTileBiometricEnabled(context))
         assertEquals(true, com.example.util.SecurityManager.isGlobalAuthEnabled(context))
     }
+
+    @Test
+    fun testDeleteHistoryRecordRemovesRecordAndAssociatedPhoto(): Unit = runBlocking {
+        // 1. Crear foto física en la carpeta de fotos
+        val photosDir = java.io.File(context.filesDir, "photos").apply { if (!exists()) mkdirs() }
+        val testPhotoFile = java.io.File(photosDir, "test_session_photo_delete.jpg")
+        testPhotoFile.writeBytes(byteArrayOf(1, 2, 3, 4, 5))
+        assertTrue(testPhotoFile.exists())
+
+        // 2. Insertar sesión de parqueo con la foto
+        val item = ParkingHistoryItem(
+            startTimestamp = 1000L,
+            endTimestamp = 3000L,
+            durationSeconds = 2000L,
+            costCharged = 5.0,
+            reasonEnded = "Finalizado por usuario",
+            photoPath = testPhotoFile.absolutePath,
+            initialBalance = 10.0
+        )
+        db.parkingDao().insertHistory(item)
+        val savedList = repository.getAllHistoryList()
+        assertEquals(1, savedList.size)
+        val savedItem = savedList[0]
+
+        // 3. Eliminar el registro
+        repository.deleteHistoryRecord(savedItem)
+
+        // 4. Verificar que se borró de la base de datos y que el archivo físico fue eliminado
+        val remainingList = repository.getAllHistoryList()
+        assertTrue(remainingList.isEmpty())
+        assertTrue(!testPhotoFile.exists())
+    }
+
+    @Test
+    fun testFullBackupAndRestoreWithPhysicalPhotosAndReceipts(): Unit = runBlocking {
+        // 1. Crear una foto física de sesión
+        val photosDir = java.io.File(context.filesDir, "photos").apply { if (!exists()) mkdirs() }
+        val sessionPhoto = java.io.File(photosDir, "session_entry_sample.jpg")
+        sessionPhoto.writeBytes("FakeSessionPhotoContent".toByteArray())
+
+        // 2. Crear un comprobante físico de recarga
+        val receiptsDir = com.example.util.ReceiptStorageUtil.getReceiptsDir(context)
+        val receiptPhoto = java.io.File(receiptsDir, "receipt_ticket_sample.jpg")
+        receiptPhoto.writeBytes("FakeReceiptPhotoContent".toByteArray())
+
+        // 3. Crear registros en la BD
+        val sessionItem = ParkingHistoryItem(
+            startTimestamp = 5000L,
+            endTimestamp = 8600L,
+            durationSeconds = 3600L,
+            costCharged = 2.50,
+            reasonEnded = "Finalizado por usuario",
+            photoPath = sessionPhoto.absolutePath,
+            initialBalance = 20.0
+        )
+        db.parkingDao().insertHistory(sessionItem)
+
+        val rechargeItem = RechargeHistoryItem(
+            amount = 30.0,
+            timestamp = 4000L,
+            receiptPhotoPath = receiptPhoto.absolutePath,
+            note = "Recarga con ticket"
+        )
+        db.parkingDao().insertRecharge(rechargeItem)
+
+        val config = repository.getOrCreateConfig().copy(balance = 27.50)
+        db.parkingDao().saveConfig(config)
+
+        // 4. Exportar respaldo completo
+        val outStream = ByteArrayOutputStream()
+        BackupUtil.exportFullBackup(
+            context = context,
+            config = config,
+            parkingHistory = repository.getAllHistoryList(),
+            rechargeHistory = repository.getAllRechargesList(),
+            outputStream = outStream
+        )
+        assertTrue(outStream.size() > 0)
+
+        // 5. Borrar archivos físicos y limpiar la base de datos para simular nuevo dispositivo
+        sessionPhoto.delete()
+        receiptPhoto.delete()
+        assertTrue(!sessionPhoto.exists())
+        assertTrue(!receiptPhoto.exists())
+
+        db.parkingDao().clearAllHistory()
+        db.parkingDao().clearAllRecharges()
+        repository.resetAll()
+        assertTrue(repository.getAllHistoryList().isEmpty())
+        assertTrue(repository.getAllRechargesList().isEmpty())
+
+        // 6. Restaurar desde el flujo ZIP
+        val inStream = ByteArrayInputStream(outStream.toByteArray())
+        val parsed = BackupUtil.restoreFullBackup(context, inStream)
+
+        assertEquals(1, parsed.photosCount)
+        assertEquals(1, parsed.receiptsCount)
+
+        repository.restoreAllData(
+            restoredConfig = parsed.config,
+            parkingHistory = parsed.parkingHistory,
+            rechargeHistory = parsed.rechargeHistory
+        )
+
+        // 7. Verificar datos y archivos restaurados
+        val restoredSessions = repository.getAllHistoryList()
+        assertEquals(1, restoredSessions.size)
+        assertEquals(2.50, restoredSessions[0].costCharged, 0.001)
+        val restoredPhotoFile = java.io.File(restoredSessions[0].photoPath)
+        assertTrue(restoredPhotoFile.exists())
+        assertEquals("FakeSessionPhotoContent", restoredPhotoFile.readText())
+
+        val restoredRecharges = repository.getAllRechargesList()
+        assertEquals(1, restoredRecharges.size)
+        assertEquals(30.0, restoredRecharges[0].amount, 0.001)
+        val restoredReceiptFile = java.io.File(restoredRecharges[0].receiptPhotoPath)
+        assertTrue(restoredReceiptFile.exists())
+        assertEquals("FakeReceiptPhotoContent", restoredReceiptFile.readText())
+
+        val restoredConfig = repository.getOrCreateConfig()
+        assertEquals(27.50, restoredConfig.balance, 0.001)
+
+        // Limpieza de archivos de prueba
+        restoredPhotoFile.delete()
+        restoredReceiptFile.delete()
+    }
+
+    @Test
+    fun testDeleteSessionRecordDoesNotAffectSubsequentBackupAndRestore(): Unit = runBlocking {
+        // Insertar 2 sesiones
+        val session1 = ParkingHistoryItem(
+            startTimestamp = 1000L,
+            endTimestamp = 2000L,
+            durationSeconds = 1000L,
+            costCharged = 3.0,
+            reasonEnded = "Finalizado por usuario",
+            initialBalance = 10.0
+        )
+        val session2 = ParkingHistoryItem(
+            startTimestamp = 3000L,
+            endTimestamp = 5000L,
+            durationSeconds = 2000L,
+            costCharged = 4.0,
+            reasonEnded = "Saldo Agotado",
+            initialBalance = 7.0
+        )
+        db.parkingDao().insertHistory(session1)
+        db.parkingDao().insertHistory(session2)
+
+        val listBefore = repository.getAllHistoryList()
+        assertEquals(2, listBefore.size)
+
+        // Eliminar session1
+        val itemToDelete = listBefore.first { it.costCharged == 3.0 }
+        repository.deleteHistoryRecord(itemToDelete)
+
+        val listAfter = repository.getAllHistoryList()
+        assertEquals(1, listAfter.size)
+        assertEquals(4.0, listAfter[0].costCharged, 0.001)
+
+        // Exportar y restaurar
+        val config = repository.getOrCreateConfig().copy(balance = 3.0)
+        val outStream = ByteArrayOutputStream()
+        BackupUtil.exportFullBackup(
+            context = context,
+            config = config,
+            parkingHistory = listAfter,
+            rechargeHistory = emptyList(),
+            outputStream = outStream
+        )
+
+        // Limpiar DB
+        db.parkingDao().clearAllHistory()
+        assertTrue(repository.getAllHistoryList().isEmpty())
+
+        // Restaurar
+        val inStream = ByteArrayInputStream(outStream.toByteArray())
+        val parsed = BackupUtil.restoreFullBackup(context, inStream)
+        repository.restoreAllData(parsed.config, parsed.parkingHistory, parsed.rechargeHistory)
+
+        val finalSessions = repository.getAllHistoryList()
+        assertEquals(1, finalSessions.size)
+        assertEquals(4.0, finalSessions[0].costCharged, 0.001)
+        assertEquals("Saldo Agotado", finalSessions[0].reasonEnded)
+    }
 }

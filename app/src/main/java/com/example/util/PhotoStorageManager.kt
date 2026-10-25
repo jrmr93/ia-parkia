@@ -81,4 +81,78 @@ object PhotoStorageManager {
             e.printStackTrace()
         }
     }
+
+    /**
+     * Exports an image (from internal storage or a content URI) to the public gallery
+     * (Pictures/Parkia) so the user can download and access it externally.
+     */
+    fun exportImageToGallery(
+        context: Context,
+        imagePathOrUri: String,
+        displayNamePrefix: String = "Parkia"
+    ): Boolean {
+        if (imagePathOrUri.isBlank()) return false
+        return try {
+            val cleanPath = imagePathOrUri.removePrefix("file://")
+            val file = File(cleanPath)
+            val inputStream: java.io.InputStream? = if (file.exists() && file.isFile) {
+                java.io.FileInputStream(file)
+            } else {
+                try {
+                    context.contentResolver.openInputStream(android.net.Uri.parse(imagePathOrUri))
+                } catch (_: Exception) {
+                    null
+                }
+            }
+
+            if (inputStream == null) return false
+
+            val timeStamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+            val fileName = "${displayNamePrefix}_$timeStamp.jpg"
+
+            val resolver = context.contentResolver
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                val contentValues = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                    put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_PICTURES + java.io.File.separator + "Parkia")
+                    put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+                val collection = android.provider.MediaStore.Images.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                val itemUri = resolver.insert(collection, contentValues) ?: return false
+
+                resolver.openOutputStream(itemUri)?.use { out ->
+                    inputStream.use { input ->
+                        input.copyTo(out)
+                    }
+                }
+
+                contentValues.clear()
+                contentValues.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                resolver.update(itemUri, contentValues, null, null)
+                true
+            } else {
+                val picturesDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_PICTURES)
+                val parkiaDir = File(picturesDir, "Parkia")
+                if (!parkiaDir.exists()) parkiaDir.mkdirs()
+                val destFile = File(parkiaDir, fileName)
+                java.io.FileOutputStream(destFile).use { out ->
+                    inputStream.use { input ->
+                        input.copyTo(out)
+                    }
+                }
+                android.media.MediaScannerConnection.scanFile(
+                    context,
+                    arrayOf(destFile.absolutePath),
+                    arrayOf("image/jpeg"),
+                    null
+                )
+                true
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
 }
+

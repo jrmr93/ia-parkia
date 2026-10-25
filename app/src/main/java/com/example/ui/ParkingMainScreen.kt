@@ -33,6 +33,7 @@ import com.example.ui.components.EditActiveSessionDialog
 import com.example.ui.components.ExhaustedBalanceAlertDialog
 import com.example.ui.components.FooterCard
 import com.example.ui.components.HistoryCard
+import com.example.ui.components.DeleteHistorySessionDialog
 import com.example.ui.components.NoFundsAlertDialog
 import com.example.ui.components.ParkingBayCard
 import com.example.ui.components.ParkingTopBar
@@ -132,6 +133,7 @@ fun ParkingMainScreen(
     }
 
     var tempPhotoUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var showAiCameraScreen by remember { mutableStateOf(false) }
 
     fun createTempImageUri(): android.net.Uri {
         val file = java.io.File(context.cacheDir, "parkia_camera_photo.jpg")
@@ -213,7 +215,7 @@ fun ParkingMainScreen(
     ) { isGranted ->
         SecurityManager.isRequestingPermission = false
         if (isGranted) {
-            launchCameraIntent()
+            showAiCameraScreen = true
         } else {
             android.widget.Toast.makeText(context, "Se requiere permiso de cámara.", android.widget.Toast.LENGTH_SHORT).show()
         }
@@ -287,6 +289,27 @@ fun ParkingMainScreen(
         galleryReceiptLauncher.launch("image/*")
     }
 
+    val galleryVisionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri: android.net.Uri? ->
+        SecurityManager.isRequestingPermission = false
+        if (uri != null) {
+            coroutineScope.launch {
+                val bitmap = decodeAndScaleBitmap(uri, maxDimension = 1600)
+                if (bitmap != null) {
+                    viewModel.processVisionAi(bitmap)
+                } else {
+                    android.widget.Toast.makeText(context, "No se pudo cargar la imagen para analizar.", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    fun launchGalleryVisionPicker() {
+        SecurityManager.isRequestingPermission = true
+        galleryVisionLauncher.launch("image/*")
+    }
+
     val exportBackupLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/zip")
     ) { uri: android.net.Uri? ->
@@ -326,6 +349,7 @@ fun ParkingMainScreen(
     var showPinAuthDialog by remember { mutableStateOf(false) }
     var pendingAuthenticatedAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     var itemToResume by remember { mutableStateOf<ParkingHistoryItem?>(null) }
+    var itemToDeleteFromResume by remember { mutableStateOf<ParkingHistoryItem?>(null) }
 
     // Helper for authenticating via PIN/Biometrics before performing sensitive actions
     fun authenticateBeforeAction(requireAuth: Boolean = false, onSuccess: () -> Unit) {
@@ -429,7 +453,10 @@ fun ParkingMainScreen(
                                 viewModel.setShowResetAllDialog(true)
                             }
                         },
-                        onHistoryItemClick = { itemToResume = it }
+                        onHistoryItemClick = { itemToResume = it },
+                        onDeleteHistoryItem = { item ->
+                            viewModel.deleteHistoryItem(item)
+                        }
                     )
                 }
 
@@ -608,11 +635,29 @@ fun ParkingMainScreen(
                 ) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
                 if (hasCamera) {
-                    launchCameraIntent()
+                    showAiCameraScreen = true
                 } else {
                     SecurityManager.isRequestingPermission = true
                     cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
                 }
+            },
+            onGalleryStart = {
+                viewModel.setShowQuickTileStartModal(false)
+                launchGalleryVisionPicker()
+            }
+        )
+    }
+
+    if (showAiCameraScreen) {
+        com.example.ui.components.AiCameraCaptureScreen(
+            onDismiss = { showAiCameraScreen = false },
+            onPhotoCaptured = { bitmap ->
+                showAiCameraScreen = false
+                viewModel.processVisionAi(bitmap)
+            },
+            onFallbackToSystemCamera = {
+                showAiCameraScreen = false
+                launchCameraIntent()
             }
         )
     }
@@ -638,7 +683,21 @@ fun ParkingMainScreen(
             },
             onRetakePhoto = {
                 viewModel.setShowVisionAiDialog(false)
-                launchCameraIntent()
+                val hasCamera = androidx.core.content.ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.CAMERA
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+                if (hasCamera) {
+                    showAiCameraScreen = true
+                } else {
+                    SecurityManager.isRequestingPermission = true
+                    cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+                }
+            },
+            onSelectGalleryPhoto = {
+                viewModel.setShowVisionAiDialog(false)
+                launchGalleryVisionPicker()
             },
             onConfirm = { balance, timestamp ->
                 viewModel.setShowVisionAiDialog(false)
@@ -676,6 +735,22 @@ fun ParkingMainScreen(
                 authenticateBeforeAction(requireAuth = true) {
                     viewModel.resumeSessionFromHistory(target)
                 }
+            },
+            onDelete = {
+                val target = historyItem
+                itemToResume = null
+                itemToDeleteFromResume = target
+            }
+        )
+    }
+
+    itemToDeleteFromResume?.let { item ->
+        DeleteHistorySessionDialog(
+            item = item,
+            onDismiss = { itemToDeleteFromResume = null },
+            onConfirm = {
+                itemToDeleteFromResume = null
+                viewModel.deleteHistoryItem(item)
             }
         )
     }

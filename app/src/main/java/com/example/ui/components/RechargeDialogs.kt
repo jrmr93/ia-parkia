@@ -15,9 +15,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,6 +31,9 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Edit
@@ -488,82 +494,121 @@ fun RechargeHistoryDialog(
     onEditRecharge: (RechargeHistoryItem) -> Unit,
     onDeleteRecharge: (RechargeHistoryItem) -> Unit
 ) {
-    val dateTimeFormat = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()) }
+    val dateTimeFormat = remember { SimpleDateFormat("dd/MM/yy HH:mm", Locale.getDefault()) }
     val totalRecharged = remember(rechargeList) { rechargeList.sumOf { it.amount } }
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        shape = CircleShape,
-                        color = SlateBlue.copy(alpha = 0.12f),
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Default.Receipt,
-                                contentDescription = null,
-                                tint = SlateBlue,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = "Registro de Recargas",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp,
-                            color = Color(0xFF0F172A)
-                        )
-                        Text(
-                            text = "${rechargeList.size} recarga(s) registrada(s)",
-                            fontSize = 11.sp,
-                            color = Color(0xFF64748B)
-                        )
-                    }
-                }
-
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Default.Close, contentDescription = "Cerrar", tint = Color(0xFF64748B))
-                }
-            }
-        },
-        text = {
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.94f)
+                .heightIn(min = 280.dp, max = 560.dp),
+            shape = RoundedCornerShape(20.dp),
+            color = Color.White,
+            tonalElevation = 6.dp,
+            shadowElevation = 8.dp
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(horizontal = 16.dp, vertical = 14.dp)
             ) {
-                // Tarjeta resumen de total recargado
+                // Header Row (Fixed)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = SlateBlue.copy(alpha = 0.12f),
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.Receipt,
+                                    contentDescription = null,
+                                    tint = SlateBlue,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Registro de Recargas",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = Color(0xFF0F172A)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Color(0xFFF1F5F9)
+                                ) {
+                                    Text(
+                                        text = "${rechargeList.size}",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF475569),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "Historial ordenado cronológicamente",
+                                fontSize = 11.sp,
+                                color = Color(0xFF64748B)
+                            )
+                        }
+                    }
+
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Cerrar",
+                            tint = Color(0xFF64748B),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Summary Row (Fixed, Outside LazyColumn)
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = Color(0xFFF0FDF4),
-                    border = BorderStroke(1.dp, SuccessEmerald.copy(alpha = 0.4f)),
+                    border = BorderStroke(1.dp, SuccessEmerald.copy(alpha = 0.35f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.padding(14.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
                             Text(
-                                text = "TOTAL HISTÓRICO RECARGADO",
-                                fontSize = 10.sp,
+                                text = "TOTAL HISTÓRICO",
+                                fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF166534)
+                                color = Color(0xFF166534),
+                                letterSpacing = 0.5.sp
                             )
                             Text(
                                 text = String.format(Locale.US, "$%.2f USD", totalRecharged),
-                                fontSize = 18.sp,
+                                fontSize = 16.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color(0xFF15803D),
                                 fontFamily = FontFamily.Monospace
@@ -574,69 +619,105 @@ fun RechargeHistoryDialog(
                             onClick = onAddNewRecharge,
                             colors = ButtonDefaults.buttonColors(containerColor = SlateBlue),
                             shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.height(36.dp).testTag("btn_history_add_new_recharge")
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier
+                                .height(34.dp)
+                                .testTag("btn_history_add_new_recharge")
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(15.dp)
+                            )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("Nueva", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
+                // Scrollable List of Records (LazyColumn)
                 if (rechargeList.isEmpty()) {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color(0xFFF8FAFC),
-                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
-                        modifier = Modifier.fillMaxWidth()
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            modifier = Modifier.padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFFF8FAFC),
+                            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp)
                         ) {
-                            Icon(
-                                Icons.Default.Receipt,
-                                contentDescription = null,
-                                tint = Color(0xFF94A3B8),
-                                modifier = Modifier.size(36.dp)
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Sin recargas registradas",
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF0F172A),
-                                fontSize = 13.sp
-                            )
-                            Text(
-                                text = "Las recargas realizadas con comprobante o manuales aparecerán aquí.",
-                                color = Color(0xFF64748B),
-                                fontSize = 11.sp,
-                                lineHeight = 15.sp
-                            )
+                            Column(
+                                modifier = Modifier.padding(20.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    Icons.Default.Receipt,
+                                    contentDescription = null,
+                                    tint = Color(0xFF94A3B8),
+                                    modifier = Modifier.size(32.dp)
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "Sin recargas registradas",
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF0F172A),
+                                    fontSize = 13.sp
+                                )
+                                Text(
+                                    text = "Toca '+ Nueva' para agregar una recarga manual o con foto.",
+                                    color = Color(0xFF64748B),
+                                    fontSize = 11.sp,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
                         }
                     }
                 } else {
-                    rechargeList.forEach { item ->
-                        RechargeItemRow(
-                            item = item,
-                            dateTimeFormat = dateTimeFormat,
-                            onViewReceipt = onViewReceipt,
-                            onEdit = { onEditRecharge(item) },
-                            onDelete = { onDeleteRecharge(item) }
-                        )
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(bottom = 6.dp)
+                    ) {
+                        items(rechargeList, key = { it.id }) { item ->
+                            RechargeItemRow(
+                                item = item,
+                                dateTimeFormat = dateTimeFormat,
+                                onViewReceipt = onViewReceipt,
+                                onEdit = { onEditRecharge(item) },
+                                onDelete = { onDeleteRecharge(item) }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Footer Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        onClick = onDismiss,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF64748B))
+                    ) {
+                        Text("Cerrar", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                     }
                 }
             }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cerrar", color = Color(0xFF64748B))
-            }
         }
-    )
+    }
 }
 
 @Composable
@@ -647,8 +728,9 @@ private fun RechargeItemRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val hasReceipt = item.receiptPhotoPath.isNotBlank()
     val bitmap = remember(item.receiptPhotoPath) {
-        if (item.receiptPhotoPath.isNotBlank()) {
+        if (hasReceipt) {
             val file = File(item.receiptPhotoPath)
             if (file.exists()) BitmapFactory.decodeFile(file.absolutePath) else null
         } else null
@@ -663,18 +745,19 @@ private fun RechargeItemRow(
             .testTag("recharge_row_${item.id}")
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Miniatura si tiene comprobante
+            // Icon or Photo Thumbnail
             if (bitmap != null) {
                 Box(
                     modifier = Modifier
-                        .size(52.dp)
+                        .size(42.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .border(1.dp, SlateBlue.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                        .border(1.dp, SlateBlue.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
                         .clickable { onViewReceipt(item.receiptPhotoPath) }
-                        .testTag("recharge_thumb_${item.id}")
+                        .testTag("recharge_thumb_${item.id}"),
+                    contentAlignment = Alignment.BottomEnd
                 ) {
                     Image(
                         bitmap = bitmap.asImageBitmap(),
@@ -682,84 +765,121 @@ private fun RechargeItemRow(
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
+                    Surface(
+                        color = Color.Black.copy(alpha = 0.6f),
+                        shape = RoundedCornerShape(topStart = 4.dp),
+                        modifier = Modifier.size(14.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Default.ZoomIn,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(10.dp)
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+            } else {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = SlateBlue.copy(alpha = 0.08f),
+                    modifier = Modifier.size(42.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.Receipt,
+                            contentDescription = null,
+                            tint = SlateBlue,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.width(10.dp))
             }
 
+            // Central details: Amount, Tag, Date, and Note
             Column(modifier = Modifier.weight(1f)) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
                         text = String.format(Locale.US, "+$%.2f USD", item.amount),
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 15.sp,
+                        fontSize = 14.sp,
                         color = Color(0xFF15803D),
                         fontFamily = FontFamily.Monospace
                     )
 
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = if (hasReceipt) SlateBlue.copy(alpha = 0.1f) else Color(0xFFE2E8F0)
+                    ) {
+                        Text(
+                            text = if (hasReceipt) "📷 Con Foto" else "✏️ Manual",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (hasReceipt) SlateBlue else Color(0xFF475569),
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text(
                         text = dateTimeFormat.format(Date(item.timestamp)),
-                        fontSize = 11.sp,
-                        color = Color(0xFF64748B)
-                    )
-                }
-
-                if (item.note.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = item.note,
-                        fontSize = 12.sp,
-                        color = Color(0xFF334155),
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-
-                if (item.receiptPhotoPath.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "📷 Comprobante adjunto (Toca miniatura para ampliar y zoom)",
-                        fontSize = 10.sp,
-                        color = SlateBlue,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                } else {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "✏️ Ingreso manual sin foto",
                         fontSize = 10.sp,
                         color = Color(0xFF64748B)
                     )
+                    if (item.note.isNotBlank()) {
+                        Text(
+                            text = " • ${item.note}",
+                            fontSize = 10.sp,
+                            color = Color(0xFF334155),
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(4.dp))
 
-            // Botones de Editar y Eliminar
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            // Action Buttons (Compact touch targets)
+            Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
                 IconButton(
                     onClick = onEdit,
-                    modifier = Modifier.size(32.dp).testTag("btn_edit_recharge_${item.id}")
+                    modifier = Modifier
+                        .size(30.dp)
+                        .testTag("btn_edit_recharge_${item.id}")
                 ) {
                     Icon(
                         Icons.Default.Edit,
                         contentDescription = "Editar",
                         tint = SlateBlue,
-                        modifier = Modifier.size(17.dp)
+                        modifier = Modifier.size(15.dp)
                     )
                 }
 
                 IconButton(
                     onClick = onDelete,
-                    modifier = Modifier.size(32.dp).testTag("btn_delete_recharge_${item.id}")
+                    modifier = Modifier
+                        .size(30.dp)
+                        .testTag("btn_delete_recharge_${item.id}")
                 ) {
                     Icon(
                         Icons.Default.Delete,
                         contentDescription = "Eliminar",
                         tint = ErrorRed,
-                        modifier = Modifier.size(17.dp)
+                        modifier = Modifier.size(15.dp)
                     )
                 }
             }

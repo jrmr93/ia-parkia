@@ -2432,11 +2432,13 @@ fun ConfirmResumeSessionDialog(
     item: ParkingHistoryItem,
     isSessionActive: Boolean,
     onDismiss: () -> Unit,
-    onConfirm: () -> Unit
+    onConfirm: () -> Unit,
+    onDelete: (() -> Unit)? = null
 ) {
     val dateFormat = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
     val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
     val initialBalance = if (item.initialBalance > 0.0) item.initialBalance else item.costCharged
+    var viewingPhotoPath by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -2520,6 +2522,7 @@ fun ConfirmResumeSessionDialog(
                                         .size(50.dp)
                                         .clip(RoundedCornerShape(8.dp))
                                         .border(1.dp, SlateBlue.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                                        .clickable { viewingPhotoPath = item.photoPath }
                                 )
                             }
                         }
@@ -2564,13 +2567,41 @@ fun ConfirmResumeSessionDialog(
             }
         },
         dismissButton = {
-            OutlinedButton(
-                onClick = onDismiss,
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.testTag("cancel_resume_session_button")
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Cancelar", color = Color(0xFF475569))
+                if (onDelete != null) {
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .testTag("delete_from_resume_dialog_button")
+                    ) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Eliminar Registro",
+                            tint = Color(0xFFEF4444)
+                        )
+                    }
+                }
+                OutlinedButton(
+                    onClick = onDismiss,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.testTag("cancel_resume_session_button")
+                ) {
+                    Text("Cancelar", color = Color(0xFF475569))
+                }
             }
         }
     )
+
+    viewingPhotoPath?.let { path ->
+        ReceiptViewerDialog(
+            imagePathOrUri = path,
+            title = "Fotografía de Sesión de Parqueo",
+            subtitle = "Captura registrada para el parqueo",
+            onDismiss = { viewingPhotoPath = null }
+        )
+    }
 }

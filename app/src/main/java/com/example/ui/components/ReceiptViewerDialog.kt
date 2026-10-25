@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
@@ -27,6 +28,13 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.rememberCoroutineScope
+import com.example.util.PhotoStorageManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import android.widget.Toast
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -65,6 +73,9 @@ fun ReceiptViewerDialog(
     onDismiss: () -> Unit
 ) {
     var showDeleteConfirmation by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    var isDownloading by remember { mutableStateOf(false) }
 
     val cleanPath = remember(imagePathOrUri) {
         imagePathOrUri.removePrefix("file://")
@@ -242,6 +253,49 @@ fun ReceiptViewerDialog(
                                 Icon(
                                     imageVector = Icons.Default.Refresh,
                                     contentDescription = "Restablecer zoom",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        IconButton(
+                            onClick = {
+                                if (isDownloading) return@IconButton
+                                isDownloading = true
+                                coroutineScope.launch(Dispatchers.IO) {
+                                    val prefix = if (title.contains("Comprobante", ignoreCase = true)) {
+                                        "Comprobante_Recarga"
+                                    } else {
+                                        "Sesion_Parqueo"
+                                    }
+                                    val success = PhotoStorageManager.exportImageToGallery(context, cleanPath, prefix)
+                                    withContext(Dispatchers.Main) {
+                                        isDownloading = false
+                                        if (success) {
+                                            Toast.makeText(context, "Imagen guardada en la galería (Pictures/Parkia)", Toast.LENGTH_LONG).show()
+                                        } else {
+                                            Toast.makeText(context, "No se pudo guardar la imagen en el dispositivo.", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.2f))
+                                .testTag("btn_download_image")
+                        ) {
+                            if (isDownloading) {
+                                CircularProgressIndicator(
+                                    color = Color.White,
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Download,
+                                    contentDescription = "Descargar imagen",
                                     tint = Color.White,
                                     modifier = Modifier.size(20.dp)
                                 )

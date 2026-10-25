@@ -26,8 +26,13 @@ class HyperIslandTest {
     @Before
     fun setup() {
         context = ApplicationProvider.getApplicationContext()
+        val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+        org.robolectric.Shadows.shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         NotificationHelper.createNotificationChannel(context)
         NotificationHelper.isHyperIslandForcedForTesting = null
+        NotificationHelper.isDismissedByUser = false
+        NotificationHelper.currentNotificationId = NotificationHelper.NOTIFICATION_ID
+        NotificationHelper.sessionGeneration = 1
     }
 
     @After
@@ -89,7 +94,8 @@ class HyperIslandTest {
         // Xiaomi HyperIsland integration extras
         val ticker = notification.extras.getString("miui.focus.ticker")
         assertEquals("$25.50", ticker)
-        assertTrue(notification.extras.getBoolean("miui.enableFloat", false))
+        assertFalse("miui.enableFloat must be false to avoid popping up floating panel on updates", notification.extras.getBoolean("miui.enableFloat", true))
+        assertFalse("miui.focus.island_first_float must be false to only update inside dynamic island", notification.extras.getBoolean("miui.focus.island_first_float", true))
 
         val focusParamJson = notification.extras.getString("miui.focus.param")
         assertNotNull("miui.focus.param must be populated", focusParamJson)
@@ -186,5 +192,64 @@ class HyperIslandTest {
         val paramV2 = JSONObject(updatedNotification.extras.getString("miui.focus.param")!!).getJSONObject("param_v2")
         assertEquals("$50.00", paramV2.getString("ticker"))
         assertEquals("$50.00", paramV2.getJSONObject("baseInfo").getString("title"))
+    }
+
+    @Test
+    fun `notification includes FLAG_NO_CLEAR and deleteIntent for dismissal intercept`() {
+        NotificationHelper.isHyperIslandForcedForTesting = true
+
+        val notification = NotificationHelper.buildBalanceNotification(
+            context = context,
+            balance = 15.00,
+            isSessionActive = false,
+            formattedDateTime = "25/10/2026 14:00:00"
+        )
+
+        assertNotNull("Notification must have deleteIntent attached to intercept swipe dismissal", notification.deleteIntent)
+        assertTrue("Notification must have FLAG_ONGOING_EVENT set", (notification.flags and Notification.FLAG_ONGOING_EVENT) != 0)
+        assertTrue("Notification must have FLAG_NO_CLEAR set to avoid accidental clearing", (notification.flags and Notification.FLAG_NO_CLEAR) != 0)
+    }
+
+    @Test
+    fun `user swipe dismissal cycles notification ID and recreates clean HyperIsland session`() {
+        NotificationHelper.isHyperIslandForcedForTesting = true
+        NotificationHelper.currentNotificationId = NotificationHelper.NOTIFICATION_ID
+        NotificationHelper.isDismissedByUser = false
+        NotificationHelper.sessionGeneration = 1
+
+        // User swipes notification away
+        NotificationHelper.onNotificationDismissed(context)
+
+        assertTrue("isDismissedByUser must be true after dismissal", NotificationHelper.isDismissedByUser)
+        assertEquals("Notification ID must toggle to NOTIFICATION_ID_ALT (1002) to avoid Android 14 suppression", NotificationHelper.NOTIFICATION_ID_ALT, NotificationHelper.currentNotificationId)
+        assertEquals("Session generation must increment to create fresh HyperIsland session", 2, NotificationHelper.sessionGeneration)
+
+        // When respawning notification after dismissal, it must NOT be marked updatable (updatable = false)
+        val respawnNotification = NotificationHelper.buildBalanceNotification(
+            context = context,
+            balance = 15.00,
+            isSessionActive = false,
+            formattedDateTime = "25/10/2026 14:01:00"
+        )
+
+        assertFalse("Respawned Focus notification must have updatable = false so HyperOS recreates the island", respawnNotification.extras.getBoolean("miui.focus.updatable", true))
+
+        // Showing notification posts to target ID and clears dismissed flag
+        NotificationHelper.showBalanceNotification(
+            context = context,
+            balance = 15.00,
+            isSessionActive = false,
+            formattedDateTime = "25/10/2026 14:01:00"
+        )
+        assertFalse("isDismissedByUser must reset to false after displaying", NotificationHelper.isDismissedByUser)
+
+        // Subsequent normal updates should be updatable = true
+        val normalUpdateNotification = NotificationHelper.buildBalanceNotification(
+            context = context,
+            balance = 15.00,
+            isSessionActive = false,
+            formattedDateTime = "25/10/2026 14:02:00"
+        )
+        assertTrue("Subsequent updates must have updatable = true", normalUpdateNotification.extras.getBoolean("miui.focus.updatable", false))
     }
 }

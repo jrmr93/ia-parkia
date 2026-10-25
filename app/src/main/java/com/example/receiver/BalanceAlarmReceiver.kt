@@ -34,6 +34,14 @@ class BalanceAlarmReceiver : BroadcastReceiver() {
                     return@launch
                 }
 
+                if (intent?.action == ACTION_NOTIFICATION_DISMISSED) {
+                    NotificationHelper.onNotificationDismissed(appContext)
+                    if (config.notificationsEnabled) {
+                        BalanceAlarmScheduler.scheduleNext(appContext, config.notificationIntervalMinutes)
+                    }
+                    return@launch
+                }
+
                 // If session is active, advance and catch up so negative balance (debt) is accurately calculated
                 val wasActive = config.isSessionActive
                 if (config.isSessionActive) {
@@ -72,5 +80,6 @@ class BalanceAlarmReceiver : BroadcastReceiver() {
 
     companion object {
         const val ACTION_BALANCE_ALARM_TICK = "com.example.action.BALANCE_ALARM_TICK"
+        const val ACTION_NOTIFICATION_DISMISSED = "com.example.action.NOTIFICATION_DISMISSED"
     }
 }

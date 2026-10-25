@@ -17,7 +17,31 @@ object NotificationHelper {
     const val CHANNEL_ID = "parkia_balance_channel"
     const val GEOFENCE_CHANNEL_ID = "parkia_geofence_channel"
     const val NOTIFICATION_ID = 1001
+    const val NOTIFICATION_ID_ALT = 1002
     const val GEOFENCE_NOTIFICATION_ID = 2002
+
+    var currentNotificationId: Int = NOTIFICATION_ID
+    var isDismissedByUser: Boolean = false
+    var sessionGeneration: Int = 1
+
+    fun onNotificationDismissed(context: Context) {
+        isDismissedByUser = true
+        sessionGeneration++
+        try {
+            NotificationManagerCompat.from(context).cancel(currentNotificationId)
+        } catch (_: Throwable) {
+        }
+        currentNotificationId = if (currentNotificationId == NOTIFICATION_ID) NOTIFICATION_ID_ALT else NOTIFICATION_ID
+    }
+
+    fun cancelBalanceNotification(context: Context) {
+        try {
+            val manager = NotificationManagerCompat.from(context)
+            manager.cancel(NOTIFICATION_ID)
+            manager.cancel(NOTIFICATION_ID_ALT)
+        } catch (_: Throwable) {
+        }
+    }
 
     fun createNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -99,7 +123,8 @@ object NotificationHelper {
         context: Context,
         builder: NotificationCompat.Builder,
         balanceOnlyText: String,
-        isDebt: Boolean = false
+        isDebt: Boolean = false,
+        isUpdate: Boolean = !isDismissedByUser
     ) {
         try {
             val carIcon = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -107,11 +132,12 @@ object NotificationHelper {
             } else null
 
             val subtitle = if (isDebt) "Deuda pendiente" else "Saldo disponible"
+            val businessId = "Parkia_$sessionGeneration"
 
-            val hyperBuilder = io.github.d4viddf.hyperisland_kit.HyperIslandNotification.Builder(context, "Parkia", balanceOnlyText)
-                .setEnableFloat(true)
+            val hyperBuilder = io.github.d4viddf.hyperisland_kit.HyperIslandNotification.Builder(context, businessId, balanceOnlyText)
+                .setEnableFloat(false)
                 .setShowNotification(true)
-                .setIslandFirstFloat(true)
+                .setIslandFirstFloat(false)
                 .setBaseInfo(
                     title = balanceOnlyText,
                     content = subtitle
@@ -163,11 +189,11 @@ object NotificationHelper {
             builder.addExtras(resourceBundle)
             builder.addExtras(customExtras)
             builder.extras.putString("miui.focus.param", jsonParam)
-            builder.extras.putBoolean("miui.enableFloat", true)
+            builder.extras.putBoolean("miui.enableFloat", false)
             builder.extras.putString("miui.focus.ticker", balanceOnlyText)
             builder.extras.putBoolean("miui.focus.show_notification", true)
-            builder.extras.putBoolean("miui.focus.updatable", true)
-            builder.extras.putBoolean("miui.focus.island_first_float", true)
+            builder.extras.putBoolean("miui.focus.updatable", isUpdate)
+            builder.extras.putBoolean("miui.focus.island_first_float", false)
 
             if (carIcon != null) {
                 builder.extras.putParcelable("miui.focus.pic_car_icon", carIcon)
@@ -210,6 +236,16 @@ object NotificationHelper {
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
 
+        val deleteIntent = android.content.Intent(context, com.example.receiver.BalanceAlarmReceiver::class.java).apply {
+            action = com.example.receiver.BalanceAlarmReceiver.ACTION_NOTIFICATION_DISMISSED
+        }
+        val deletePendingIntent = android.app.PendingIntent.getBroadcast(
+            context,
+            9009,
+            deleteIntent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+
         val contentText = "Actualizado: $formattedDateTime • $stateText"
         val detailText = if (isDebt) {
             if (isSessionActive) {
@@ -230,15 +266,18 @@ object NotificationHelper {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .setContentIntent(pendingIntent)
+            .setDeleteIntent(deletePendingIntent)
             .setOnlyAlertOnce(true)
 
         // Compatible with Xiaomi HyperOS HyperIsland: displays strictly user balance (e.g. $25.50)
         // Keeps conventional notification as alternative for incompatible devices
         if (isHyperIslandSupported(context)) {
-            applyHyperIsland(context, builder, balanceOnlyText, isDebt)
+            applyHyperIsland(context, builder, balanceOnlyText, isDebt, isUpdate = !isDismissedByUser)
         }
 
-        return builder.build()
+        val notification = builder.build()
+        notification.flags = notification.flags or Notification.FLAG_ONGOING_EVENT or Notification.FLAG_NO_CLEAR
+        return notification
     }
 
     fun showBalanceNotification(
@@ -258,10 +297,15 @@ object NotificationHelper {
             }
         }
 
+        val targetId = currentNotificationId
         val notification = buildBalanceNotification(context, balance, isSessionActive, formattedDateTime)
 
         try {
-            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
+            val manager = NotificationManagerCompat.from(context)
+            val oldId = if (targetId == NOTIFICATION_ID) NOTIFICATION_ID_ALT else NOTIFICATION_ID
+            manager.cancel(oldId)
+            manager.notify(targetId, notification)
+            isDismissedByUser = false
         } catch (_: Throwable) {
             // Catch any notification system exception gracefully
         }

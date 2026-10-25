@@ -43,12 +43,12 @@ class ParkiaForegroundService : Service() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 startForeground(
-                    NotificationHelper.NOTIFICATION_ID,
+                    NotificationHelper.currentNotificationId,
                     initialNotification,
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
                 )
             } else {
-                startForeground(NotificationHelper.NOTIFICATION_ID, initialNotification)
+                startForeground(NotificationHelper.currentNotificationId, initialNotification)
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -87,9 +87,9 @@ class ParkiaForegroundService : Service() {
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     val serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-                    startForeground(NotificationHelper.NOTIFICATION_ID, notification, serviceType)
+                    startForeground(NotificationHelper.currentNotificationId, notification, serviceType)
                 } else {
-                    startForeground(NotificationHelper.NOTIFICATION_ID, notification)
+                    startForeground(NotificationHelper.currentNotificationId, notification)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -129,6 +129,38 @@ class ParkiaForegroundService : Service() {
         }
     }
 
+    private fun updateForegroundNotification(
+        balance: Double,
+        isSessionActive: Boolean,
+        formattedDateTime: String
+    ) {
+        val targetId = NotificationHelper.currentNotificationId
+        if (NotificationHelper.isDismissedByUser) {
+            val freshNotification = NotificationHelper.buildBalanceNotification(
+                context = applicationContext,
+                balance = balance,
+                isSessionActive = isSessionActive,
+                formattedDateTime = formattedDateTime
+            )
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    val serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                    startForeground(targetId, freshNotification, serviceType)
+                } else {
+                    startForeground(targetId, freshNotification)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        NotificationHelper.showBalanceNotification(
+            context = applicationContext,
+            balance = balance,
+            isSessionActive = isSessionActive,
+            formattedDateTime = formattedDateTime
+        )
+    }
+
     private suspend fun updateNotification(repository: ParkingRepository) {
         val config = repository.getOrCreateConfig()
         val wasActive = config.isSessionActive
@@ -141,8 +173,7 @@ class ParkiaForegroundService : Service() {
         }
         val nowFormatted = dateTimeFormat.format(Date())
 
-        NotificationHelper.showBalanceNotification(
-            context = applicationContext,
+        updateForegroundNotification(
             balance = updatedConfig.balance,
             isSessionActive = updatedConfig.isSessionActive,
             formattedDateTime = nowFormatted
@@ -163,8 +194,7 @@ class ParkiaForegroundService : Service() {
                     }
                     val updated = repository.getOrCreateConfig()
                     val nowFormatted = dateTimeFormat.format(Date())
-                    NotificationHelper.showBalanceNotification(
-                        context = applicationContext,
+                    updateForegroundNotification(
                         balance = updated.balance,
                         isSessionActive = updated.isSessionActive,
                         formattedDateTime = nowFormatted
@@ -189,8 +219,7 @@ class ParkiaForegroundService : Service() {
                     lastObservedBalance = cfg.balance
                     if (balanceChanged) {
                         val nowFormatted = dateTimeFormat.format(Date())
-                        NotificationHelper.showBalanceNotification(
-                            context = applicationContext,
+                        updateForegroundNotification(
                             balance = cfg.balance,
                             isSessionActive = cfg.isSessionActive,
                             formattedDateTime = nowFormatted
@@ -213,8 +242,7 @@ class ParkiaForegroundService : Service() {
                 val config = repository.getOrCreateConfig()
                 if (config.notificationsEnabled) {
                     val nowFormatted = dateTimeFormat.format(Date())
-                    NotificationHelper.showBalanceNotification(
-                        context = applicationContext,
+                    updateForegroundNotification(
                         balance = config.balance,
                         isSessionActive = config.isSessionActive,
                         formattedDateTime = nowFormatted

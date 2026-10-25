@@ -23,11 +23,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -80,12 +83,14 @@ fun HistoryCard(
     totalSessionsCount: Int,
     sessionPhotoPath: String = "",
     onResetAllClick: () -> Unit,
-    onHistoryItemClick: (ParkingHistoryItem) -> Unit = {}
+    onHistoryItemClick: (ParkingHistoryItem) -> Unit = {},
+    onDeleteHistoryItem: (ParkingHistoryItem) -> Unit = {}
 ) {
     val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
     val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
 
     var selectedEnlargedPhotoPath by remember { mutableStateOf<String?>(null) }
+    var itemToDelete by remember { mutableStateOf<ParkingHistoryItem?>(null) }
 
     val infiniteTransition = rememberInfiniteTransition(label = "history_pulse")
     val pulseAlpha by infiniteTransition.animateFloat(
@@ -474,6 +479,7 @@ fun HistoryCard(
                             timeFormat = timeFormat,
                             dateFormat = dateFormat,
                             onPhotoClick = { selectedEnlargedPhotoPath = it },
+                            onDeleteClick = { itemToDelete = it },
                             onItemClick = onHistoryItemClick
                         )
                     }
@@ -482,10 +488,24 @@ fun HistoryCard(
         }
     }
 
-    // Modal to enlarge captured photo on tap
+    // Modal to confirm deletion of a session record
+    itemToDelete?.let { item ->
+        DeleteHistorySessionDialog(
+            item = item,
+            onDismiss = { itemToDelete = null },
+            onConfirm = {
+                itemToDelete = null
+                onDeleteHistoryItem(item)
+            }
+        )
+    }
+
+    // Modal to enlarge captured photo on tap using full-screen interactive viewer with download
     selectedEnlargedPhotoPath?.let { path ->
-        EnlargedPhotoDialog(
-            photoPath = path,
+        ReceiptViewerDialog(
+            imagePathOrUri = path,
+            title = "Fotografía de Inicio de Sesión",
+            subtitle = "Captura registrada para el parqueo",
             onDismiss = { selectedEnlargedPhotoPath = null }
         )
     }
@@ -497,6 +517,7 @@ private fun HistoryItemRow(
     timeFormat: SimpleDateFormat,
     dateFormat: SimpleDateFormat,
     onPhotoClick: (String) -> Unit,
+    onDeleteClick: (ParkingHistoryItem) -> Unit,
     onItemClick: (ParkingHistoryItem) -> Unit
 ) {
     val isExhausted = item.reasonEnded.contains("Agotado", ignoreCase = true)
@@ -521,7 +542,7 @@ private fun HistoryItemRow(
             Column(
                 modifier = Modifier.weight(1f)
             ) {
-                // Row 1: Date & Reason badge
+                // Row 1: Date & Reason badge & Delete button
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -534,17 +555,36 @@ private fun HistoryItemRow(
                         color = Color(0xFF64748B)
                     )
 
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (isExhausted) ErrorRed.copy(alpha = 0.12f) else SlateBlue.copy(alpha = 0.1f)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(
-                            text = item.reasonEnded,
-                            color = if (isExhausted) ErrorRed else SlateBlue,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isExhausted) ErrorRed.copy(alpha = 0.12f) else SlateBlue.copy(alpha = 0.1f)
+                        ) {
+                            Text(
+                                text = item.reasonEnded,
+                                color = if (isExhausted) ErrorRed else SlateBlue,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+
+                        IconButton(
+                            onClick = { onDeleteClick(item) },
+                            modifier = Modifier
+                                .size(26.dp)
+                                .testTag("btn_delete_history_${item.id}")
+                        ) {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = "Eliminar registro de sesión",
+                                tint = ErrorRed.copy(alpha = 0.75f),
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
                     }
                 }
 
@@ -674,94 +714,91 @@ private fun HistoryItemRow(
 }
 
 @Composable
-private fun EnlargedPhotoDialog(
-    photoPath: String,
-    onDismiss: () -> Unit
+fun DeleteHistorySessionDialog(
+    item: ParkingHistoryItem,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
 ) {
-    val bitmap = remember(photoPath) {
-        PhotoStorageManager.loadPhotoFromInternalStorage(photoPath)
-    }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+    val dateFormat = remember { SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                Icons.Default.Delete,
+                contentDescription = null,
+                tint = ErrorRed,
+                modifier = Modifier.size(32.dp)
+            )
+        },
+        title = {
+            Text(
+                text = "¿Eliminar registro de sesión?",
+                fontWeight = FontWeight.Bold,
+                fontSize = 17.sp,
+                color = Color(0xFF0F172A)
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Esta acción eliminará este registro de sesión de forma permanente:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF334155)
+                )
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFFF1F5F9),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            shape = CircleShape,
-                            color = SlateBlue.copy(alpha = 0.1f),
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Default.DirectionsCar,
-                                    contentDescription = null,
-                                    tint = SlateBlue,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
                         Text(
-                            text = "Fotografía de Parqueo",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
+                            text = "• Ingreso: ${dateFormat.format(Date(item.startTimestamp))}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF0F172A)
                         )
-                    }
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = "Cerrar",
-                            tint = Color(0xFF64748B)
+                        Text(
+                            text = "• Salida: ${dateFormat.format(Date(item.endTimestamp))}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF0F172A)
+                        )
+                        Text(
+                            text = "• Cobro registrado: $${String.format(Locale.US, "%.2f", item.costCharged)} USD",
+                            fontSize = 12.sp,
+                            color = SlateBlue,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                if (bitmap != null) {
-                    Image(
-                        bitmap = bitmap.asImageBitmap(),
-                        contentDescription = "Foto Ampliada",
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 380.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
-                    )
-                } else {
+                if (item.photoPath.isNotBlank()) {
                     Text(
-                        text = "Imagen no disponible.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF64748B)
+                        text = "⚠️ La fotografía adjunta a este registro también se borrará del almacenamiento del dispositivo.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ErrorRed,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Text(
-                    text = "🔒 Guardada en almacenamiento privado interno",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF94A3B8),
-                    fontSize = 11.sp
-                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(containerColor = ErrorRed),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.testTag("btn_confirm_delete_history")
+            ) {
+                Text("Sí, Eliminar", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("Cancelar", color = Color(0xFF475569))
             }
         }
-    }
+    )
 }
+

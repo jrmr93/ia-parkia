@@ -275,6 +275,17 @@ class ParkingRepository(private val dao: ParkingDao) {
     }
 
     /**
+     * Deletes a session record permanently from parking history and deletes its
+     * attached photo file if one exists.
+     */
+    suspend fun deleteHistoryRecord(item: ParkingHistoryItem) = withContext(Dispatchers.IO) {
+        dao.deleteHistoryItem(item.id)
+        if (item.photoPath.isNotBlank()) {
+            com.example.util.PhotoStorageManager.deletePhoto(item.photoPath)
+        }
+    }
+
+    /**
      * Modifies the active session's entry timestamp AND initial balance,
      * automatically recalculating all costs, elapsed time and remaining balance without stopping.
      */

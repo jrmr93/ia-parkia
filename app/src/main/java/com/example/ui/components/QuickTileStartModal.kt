@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
@@ -60,7 +61,8 @@ fun QuickTileStartModal(
     onTraditionalStart: () -> Unit,
     onCustomStart: () -> Unit,
     onVoiceStart: () -> Unit,
-    onCameraStart: () -> Unit
+    onCameraStart: () -> Unit,
+    onGalleryStart: () -> Unit = {}
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -147,6 +149,18 @@ fun QuickTileStartModal(
                     onClick = {
                         onDismiss()
                         onCameraStart()
+                    }
+                )
+
+                QuickOptionCard(
+                    title = "Seleccionar Imagen (IA)",
+                    description = "Elige una foto o captura del ticket guardada en tu dispositivo para analizar saldo y hora.",
+                    icon = Icons.Default.PhotoLibrary,
+                    containerColor = Color(0xFFE0F2FE),
+                    iconColor = Color(0xFF0284C7),
+                    onClick = {
+                        onDismiss()
+                        onGalleryStart()
                     }
                 )
             }
@@ -347,6 +361,7 @@ fun VisionAiResultDialog(
     result: AiRecognitionResult,
     onDismiss: () -> Unit,
     onRetakePhoto: (() -> Unit)? = null,
+    onSelectGalleryPhoto: (() -> Unit)? = null,
     onConfirm: (balance: Double, timestamp: Long) -> Unit
 ) {
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
@@ -449,12 +464,22 @@ fun VisionAiResultDialog(
             }
         },
         dismissButton = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 if (onRetakePhoto != null) {
                     TextButton(onClick = onRetakePhoto) {
-                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Retomar Foto")
+                        Text("Cámara")
+                    }
+                }
+                if (onSelectGalleryPhoto != null) {
+                    TextButton(onClick = onSelectGalleryPhoto) {
+                        Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Galería")
                     }
                 }
                 TextButton(onClick = onDismiss) {
