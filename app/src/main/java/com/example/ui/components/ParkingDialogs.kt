@@ -48,6 +48,8 @@ import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -259,6 +261,8 @@ fun TariffSettingsDialog(
     onClearNfcTag: () -> Unit = {},
     isSessionActive: Boolean = false,
     onTestGeminiKey: ((apiKey: String, modelName: String, onResult: (Boolean, String) -> Unit) -> Unit)? = null,
+    onExportBackup: () -> Unit = {},
+    onRestoreBackup: () -> Unit = {},
     onDismiss: () -> Unit,
     onConfirm: (
         amount: Double,
@@ -1252,6 +1256,61 @@ fun TariffSettingsDialog(
                     )
                 }
 
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.CloudDownload,
+                        contentDescription = null,
+                        tint = SlateBlue,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Copia de Seguridad y Restauración:",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0F172A)
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Genera un respaldo total en formato ZIP con toda la base de datos (sesiones, recargas, monedero, credenciales) y todas las fotos/comprobantes físicos. O restaura un respaldo previo.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF64748B),
+                    fontSize = 11.sp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = onExportBackup,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = SlateBlue),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("export_backup_button")
+                    ) {
+                        Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Descargar Respaldo", fontSize = 11.sp, maxLines = 1)
+                    }
+
+                    OutlinedButton(
+                        onClick = onRestoreBackup,
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, SlateBlue),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("restore_backup_button")
+                    ) {
+                        Icon(Icons.Default.CloudUpload, contentDescription = null, tint = SlateBlue, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Restaurar Respaldo", fontSize = 11.sp, color = SlateBlue, maxLines = 1)
+                    }
+                }
+
                 errorMessage?.let {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(it, color = ErrorRed, style = MaterialTheme.typography.bodySmall)
@@ -1311,6 +1370,56 @@ fun TariffSettingsDialog(
         }
     )
     }
+}
+
+/**
+ * Dialog to Confirm System Backup Restoration
+ */
+@Composable
+fun RestoreBackupConfirmationDialog(
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        icon = {
+            Icon(
+                Icons.Default.CloudUpload,
+                contentDescription = "Restaurar Respaldo",
+                tint = SlateBlue,
+                modifier = Modifier.size(32.dp)
+            )
+        },
+        title = {
+            Text(
+                "¿Restaurar Respaldo Total?",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF0F172A)
+            )
+        },
+        text = {
+            Text(
+                "Esta acción reemplazará la base de datos actual, historial de sesiones, saldo, comprobantes de recarga y ajustes con la información contenida en el archivo de respaldo seleccionado.\n\n¿Deseas continuar?",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFF334155)
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(containerColor = SlateBlue)
+            ) {
+                Text("Sí, Restaurar", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("Cancelar", color = Color(0xFF475569))
+            }
+        }
+    )
 }
 
 /**

@@ -9,6 +9,15 @@ class ParkingRepository(private val dao: ParkingDao) {
 
     val configFlow: Flow<ParkingConfig?> = dao.getConfigFlow()
     val historyFlow: Flow<List<ParkingHistoryItem>> = dao.getAllHistory()
+    val rechargeHistoryFlow: Flow<List<RechargeHistoryItem>> = dao.getAllRecharges()
+
+    suspend fun getAllHistoryList(): List<ParkingHistoryItem> = withContext(Dispatchers.IO) {
+        dao.getAllHistoryList()
+    }
+
+    suspend fun getAllRechargesList(): List<RechargeHistoryItem> = withContext(Dispatchers.IO) {
+        dao.getAllRechargesList()
+    }
 
     suspend fun getLastHistoryItem(): ParkingHistoryItem? = withContext(Dispatchers.IO) {
         dao.getLastHistoryItem()
@@ -296,11 +305,70 @@ class ParkingRepository(private val dao: ParkingDao) {
         return@withContext false
     }
 
-    suspend fun rechargeBalance(amount: Double) = withContext(Dispatchers.IO) {
+    suspend fun rechargeBalance(amount: Double, note: String = "Recarga manual") = withContext(Dispatchers.IO) {
         if (amount <= 0.0) return@withContext
+        addRechargeRecord(amount = amount, receiptPhotoPath = "", note = note)
+    }
+
+    suspend fun addRechargeRecord(
+        amount: Double,
+        receiptPhotoPath: String = "",
+        note: String = "",
+        timestamp: Long = System.currentTimeMillis()
+    ): Long = withContext(Dispatchers.IO) {
+        if (amount <= 0.0) return@withContext -1L
+        val item = RechargeHistoryItem(
+            amount = amount,
+            timestamp = timestamp,
+            receiptPhotoPath = receiptPhotoPath,
+            note = note.trim()
+        )
+        val id = dao.insertRecharge(item)
         val config = getOrCreateConfig()
         val newBalance = config.balance + amount
         val newInitial = if (config.isSessionActive) config.sessionInitialBalance + amount else config.sessionInitialBalance
+        dao.saveConfig(
+            config.copy(
+                balance = newBalance,
+                sessionInitialBalance = newInitial
+            )
+        )
+        id
+    }
+
+    suspend fun updateRechargeRecord(
+        item: RechargeHistoryItem,
+        newAmount: Double,
+        newNote: String,
+        newTimestamp: Long
+    ) = withContext(Dispatchers.IO) {
+        val diff = newAmount - item.amount
+        val updatedItem = item.copy(
+            amount = newAmount,
+            note = newNote.trim(),
+            timestamp = newTimestamp
+        )
+        dao.updateRecharge(updatedItem)
+
+        val config = getOrCreateConfig()
+        val newBalance = config.balance + diff
+        val newInitial = if (config.isSessionActive) config.sessionInitialBalance + diff else config.sessionInitialBalance
+        dao.saveConfig(
+            config.copy(
+                balance = newBalance,
+                sessionInitialBalance = newInitial
+            )
+        )
+    }
+
+    suspend fun deleteRechargeRecord(item: RechargeHistoryItem) = withContext(Dispatchers.IO) {
+        dao.deleteRecharge(item.id)
+        if (item.receiptPhotoPath.isNotBlank()) {
+            com.example.util.ReceiptStorageUtil.deleteReceiptFile(item.receiptPhotoPath)
+        }
+        val config = getOrCreateConfig()
+        val newBalance = config.balance - item.amount
+        val newInitial = if (config.isSessionActive) config.sessionInitialBalance - item.amount else config.sessionInitialBalance
         dao.saveConfig(
             config.copy(
                 balance = newBalance,
@@ -335,10 +403,11 @@ class ParkingRepository(private val dao: ParkingDao) {
     }
 
     /**
-     * Resets everything: clears all history records AND sets balance to $0.00.
+     * Resets everything: clears all history records AND recharge records, and sets balance to $0.00.
      */
     suspend fun resetAll() = withContext(Dispatchers.IO) {
         dao.clearAllHistory()
+        dao.clearAllRecharges()
         val config = getOrCreateConfig()
         dao.saveConfig(
             config.copy(
@@ -351,6 +420,23 @@ class ParkingRepository(private val dao: ParkingDao) {
                 lastSessionPhotoPath = ""
             )
         )
+    }
+
+    suspend fun restoreAllData(
+        restoredConfig: ParkingConfig,
+        parkingHistory: List<ParkingHistoryItem>,
+        rechargeHistory: List<RechargeHistoryItem>
+    ) = withContext(Dispatchers.IO) {
+        dao.clearAllHistory()
+        dao.clearAllRecharges()
+
+        for (item in parkingHistory) {
+            dao.insertHistory(item)
+        }
+        for (recharge in rechargeHistory) {
+            dao.insertRecharge(recharge)
+        }
+        dao.saveConfig(restoredConfig)
     }
 
     suspend fun updateTariff(amount: Double, minutes: Int) = withContext(Dispatchers.IO) {

@@ -138,6 +138,7 @@ dependencies {
   implementation(libs.maps.compose)
   implementation(libs.play.services.maps)
   implementation(libs.androidx.car.app)
+  implementation(libs.play.services.mlkit.document.scanner)
   implementation(libs.retrofit)
   implementation("com.google.mlkit:text-recognition:16.0.1")
   implementation("com.google.ai.client.generativeai:generativeai:0.9.0")

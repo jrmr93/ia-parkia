@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.AddCard
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.HourglassBottom
+import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Button
@@ -55,8 +56,10 @@ fun WalletCard(
     isLowBalance: Boolean,
     estimatedExhaustion: String?,
     isSessionActive: Boolean,
+    rechargeCount: Int = 0,
     onOpenCustomRecharge: () -> Unit,
-    onOpenResetBalance: () -> Unit
+    onOpenResetBalance: () -> Unit,
+    onOpenRechargeHistory: () -> Unit = {}
 ) {
     val isDebt = balance < -0.0001
     val isExhausted = balance <= 0.0001
@@ -349,32 +352,61 @@ fun WalletCard(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Single Keyboard/Custom Recharge Button (No quick recharge buttons)
-            Button(
-                onClick = onOpenCustomRecharge,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = SlateBlue,
-                    contentColor = Color.White
-                ),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .testTag("custom_recharge_button")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Icon(
-                    Icons.Default.AddCard,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = Color.White
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Recargar Saldo (Ingresar valor)",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
-                )
+                Button(
+                    onClick = onOpenCustomRecharge,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = SlateBlue,
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .weight(1.2f)
+                        .height(48.dp)
+                        .testTag("custom_recharge_button")
+                ) {
+                    Icon(
+                        Icons.Default.AddCard,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = Color.White
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Recargar Saldo",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = onOpenRechargeHistory,
+                    border = BorderStroke(1.dp, SlateBlue.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = SlateBlue),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .testTag("recharge_history_button")
+                ) {
+                    Icon(
+                        Icons.Default.Receipt,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = SlateBlue
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (rechargeCount > 0) "Recargas ($rechargeCount)" else "Recargas",
+                        color = SlateBlue,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
             }
         }
     }

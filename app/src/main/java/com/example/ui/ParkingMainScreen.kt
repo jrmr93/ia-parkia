@@ -42,6 +42,13 @@ import com.example.ui.components.ResetAllDialog
 import com.example.ui.components.ResetBalanceDialog
 import com.example.ui.components.TariffSettingsDialog
 import com.example.ui.components.WalletCard
+import com.example.ui.components.RechargeOptionsDialog
+import com.example.ui.components.ConfirmRechargeFromAiDialog
+import com.example.ui.components.RechargeHistoryDialog
+import com.example.ui.components.EditRechargeDialog
+import com.example.ui.components.DeleteRechargeDialog
+import com.example.ui.components.ReceiptViewerDialog
+import com.example.ui.components.RestoreBackupConfirmationDialog
 import com.example.util.SecurityManager
 import com.example.data.ParkingHistoryItem
 import kotlinx.coroutines.Dispatchers
@@ -92,6 +99,228 @@ fun ParkingMainScreen(
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
+    }
+
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+
+    fun decodeAndScaleBitmap(uri: android.net.Uri, maxDimension: Int = 1024): android.graphics.Bitmap? {
+        return try {
+            val options = android.graphics.BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                android.graphics.BitmapFactory.decodeStream(stream, null, options)
+            }
+
+            var sampleSize = 1
+            while (options.outWidth / sampleSize > maxDimension || options.outHeight / sampleSize > maxDimension) {
+                sampleSize *= 2
+            }
+
+            val scaleOptions = android.graphics.BitmapFactory.Options().apply {
+                inSampleSize = sampleSize
+                inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
+            }
+
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                android.graphics.BitmapFactory.decodeStream(stream, null, scaleOptions)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    var tempPhotoUri by remember { mutableStateOf<android.net.Uri?>(null) }
+
+    fun createTempImageUri(): android.net.Uri {
+        val file = java.io.File(context.cacheDir, "parkia_camera_photo.jpg")
+        return androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+    }
+
+    val speechLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        SecurityManager.isRequestingPermission = false
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val spokenText = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull() ?: ""
+            if (spokenText.isNotBlank()) {
+                viewModel.processVoiceAi(spokenText)
+            }
+        }
+    }
+
+    fun launchSpeechIntent() {
+        SecurityManager.isRequestingPermission = true
+        val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, java.util.Locale.getDefault())
+            putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Di tu saldo inicial...")
+        }
+        try {
+            speechLauncher.launch(intent)
+        } catch (e: Exception) {
+            SecurityManager.isRequestingPermission = false
+            android.widget.Toast.makeText(context, "No se pudo abrir el dictado por voz.", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val cameraLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.TakePicture()
+    ) { success ->
+        SecurityManager.isRequestingPermission = false
+        if (success && tempPhotoUri != null) {
+            val bitmap = decodeAndScaleBitmap(tempPhotoUri!!)
+            if (bitmap != null) {
+                viewModel.processVisionAi(bitmap)
+            }
+            try {
+                val tempFile = java.io.File(context.cacheDir, "parkia_camera_photo.jpg")
+                if (tempFile.exists()) tempFile.delete()
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun launchCameraIntent() {
+        SecurityManager.isRequestingPermission = true
+        try {
+            val uri = createTempImageUri()
+            tempPhotoUri = uri
+            cameraLauncher.launch(uri)
+        } catch (e: Exception) {
+            SecurityManager.isRequestingPermission = false
+            android.widget.Toast.makeText(context, "No se pudo abrir la cámara.", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val audioPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        SecurityManager.isRequestingPermission = false
+        if (isGranted) {
+            launchSpeechIntent()
+        } else {
+            android.widget.Toast.makeText(context, "Se requiere permiso de micrófono.", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val cameraPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        SecurityManager.isRequestingPermission = false
+        if (isGranted) {
+            launchCameraIntent()
+        } else {
+            android.widget.Toast.makeText(context, "Se requiere permiso de cámara.", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val documentScannerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        SecurityManager.isRequestingPermission = false
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val scanResult = com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult.fromActivityResultIntent(result.data)
+            val pageUri = scanResult?.pages?.firstOrNull()?.imageUri
+            if (pageUri != null) {
+                coroutineScope.launch {
+                    val bitmap = decodeAndScaleBitmap(pageUri, maxDimension = 1600)
+                    if (bitmap != null) {
+                        viewModel.processReceiptImage(bitmap)
+                    } else {
+                        android.widget.Toast.makeText(context, "No se pudo procesar la imagen del comprobante.", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
+    fun launchDocumentScanner() {
+        if (activity == null) {
+            android.widget.Toast.makeText(context, "Actividad no disponible.", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val options = com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.Builder()
+            .setGalleryImportAllowed(false)
+            .setPageLimit(1)
+            .setResultFormats(
+                com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.RESULT_FORMAT_JPEG
+            )
+            .setScannerMode(com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.SCANNER_MODE_FULL)
+            .build()
+
+        val scanner = com.google.mlkit.vision.documentscanner.GmsDocumentScanning.getClient(options)
+        scanner.getStartScanIntent(activity)
+            .addOnSuccessListener { intentSender ->
+                SecurityManager.isRequestingPermission = true
+                documentScannerLauncher.launch(
+                    androidx.activity.result.IntentSenderRequest.Builder(intentSender).build()
+                )
+            }
+            .addOnFailureListener { e ->
+                android.widget.Toast.makeText(context, "Error al iniciar escáner de comprobantes: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+            }
+    }
+
+    val galleryReceiptLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri: android.net.Uri? ->
+        SecurityManager.isRequestingPermission = false
+        if (uri != null) {
+            coroutineScope.launch {
+                val bitmap = decodeAndScaleBitmap(uri, maxDimension = 1600)
+                if (bitmap != null) {
+                    viewModel.processReceiptImage(bitmap)
+                } else {
+                    android.widget.Toast.makeText(context, "No se pudo cargar la imagen del comprobante.", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    fun launchGalleryReceiptPicker() {
+        SecurityManager.isRequestingPermission = true
+        galleryReceiptLauncher.launch("image/*")
+    }
+
+    val exportBackupLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri: android.net.Uri? ->
+        SecurityManager.isRequestingPermission = false
+        if (uri != null) {
+            viewModel.exportTotalBackup(uri) { success, message ->
+                android.widget.Toast.makeText(context, message, if (success) android.widget.Toast.LENGTH_LONG else android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun launchExportBackup() {
+        SecurityManager.isRequestingPermission = true
+        val dateFormat = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+        val fileName = "Parkia_Backup_${dateFormat.format(java.util.Date())}.zip"
+        exportBackupLauncher.launch(fileName)
+    }
+
+    var pendingRestoreUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var showRestoreConfirmDialog by remember { mutableStateOf(false) }
+
+    val restoreBackupLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri: android.net.Uri? ->
+        SecurityManager.isRequestingPermission = false
+        if (uri != null) {
+            pendingRestoreUri = uri
+            showRestoreConfirmDialog = true
+        }
+    }
+
+    fun launchRestoreBackup() {
+        SecurityManager.isRequestingPermission = true
+        restoreBackupLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
     }
 
     var showPinAuthDialog by remember { mutableStateOf(false) }
@@ -156,7 +385,9 @@ fun ParkingMainScreen(
                         isLowBalance = uiState.isLowBalance,
                         estimatedExhaustion = uiState.estimatedExhaustionFormatted,
                         isSessionActive = uiState.config.isSessionActive,
-                        onOpenCustomRecharge = { viewModel.setShowRechargeCustomDialog(true) },
+                        rechargeCount = uiState.rechargeHistory.size,
+                        onOpenCustomRecharge = { viewModel.setShowRechargeOptionsModal(true) },
+                        onOpenRechargeHistory = { viewModel.setShowRechargeHistoryModal(true) },
                         onOpenResetBalance = {
                             authenticateBeforeAction {
                                 viewModel.setShowResetBalanceDialog(true)
@@ -281,6 +512,12 @@ fun ParkingMainScreen(
             onTestGeminiKey = { apiKey, modelName, onResult ->
                 viewModel.testGeminiApiKey(apiKey, modelName, onResult)
             },
+            onExportBackup = {
+                launchExportBackup()
+            },
+            onRestoreBackup = {
+                launchRestoreBackup()
+            },
             onDismiss = {
                 viewModel.setIsScanningNfcForRegistration(false)
                 viewModel.setShowTariffSettingsDialog(false)
@@ -321,123 +558,6 @@ fun ParkingMainScreen(
         )
     }
 
-    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
-
-    var tempPhotoUri by remember { mutableStateOf<android.net.Uri?>(null) }
-
-    fun createTempImageUri(): android.net.Uri {
-        val file = java.io.File(context.cacheDir, "parkia_camera_photo.jpg")
-        return androidx.core.content.FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            file
-        )
-    }
-
-    val speechLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        SecurityManager.isRequestingPermission = false
-        if (result.resultCode == android.app.Activity.RESULT_OK) {
-            val spokenText = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull() ?: ""
-            if (spokenText.isNotBlank()) {
-                viewModel.processVoiceAi(spokenText)
-            }
-        }
-    }
-
-    fun decodeAndScaleBitmap(uri: android.net.Uri, maxDimension: Int = 1024): android.graphics.Bitmap? {
-        return try {
-            val options = android.graphics.BitmapFactory.Options().apply {
-                inJustDecodeBounds = true
-            }
-            context.contentResolver.openInputStream(uri)?.use { stream ->
-                android.graphics.BitmapFactory.decodeStream(stream, null, options)
-            }
-
-            var sampleSize = 1
-            while (options.outWidth / sampleSize > maxDimension || options.outHeight / sampleSize > maxDimension) {
-                sampleSize *= 2
-            }
-
-            val scaleOptions = android.graphics.BitmapFactory.Options().apply {
-                inSampleSize = sampleSize
-                inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
-            }
-
-            context.contentResolver.openInputStream(uri)?.use { stream ->
-                android.graphics.BitmapFactory.decodeStream(stream, null, scaleOptions)
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-    }
-
-    val cameraLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.TakePicture()
-    ) { success ->
-        SecurityManager.isRequestingPermission = false
-        if (success && tempPhotoUri != null) {
-            val bitmap = decodeAndScaleBitmap(tempPhotoUri!!)
-            if (bitmap != null) {
-                viewModel.processVisionAi(bitmap)
-            }
-            try {
-                val tempFile = java.io.File(context.cacheDir, "parkia_camera_photo.jpg")
-                if (tempFile.exists()) tempFile.delete()
-            } catch (_: Exception) {}
-        }
-    }
-
-    fun launchCameraIntent() {
-        SecurityManager.isRequestingPermission = true
-        try {
-            val uri = createTempImageUri()
-            tempPhotoUri = uri
-            cameraLauncher.launch(uri)
-        } catch (e: Exception) {
-            SecurityManager.isRequestingPermission = false
-            android.widget.Toast.makeText(context, "No se pudo abrir la cámara.", android.widget.Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    fun launchSpeechIntent() {
-        SecurityManager.isRequestingPermission = true
-        val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, java.util.Locale.getDefault())
-            putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Di tu saldo inicial...")
-        }
-        try {
-            speechLauncher.launch(intent)
-        } catch (e: Exception) {
-            SecurityManager.isRequestingPermission = false
-            android.widget.Toast.makeText(context, "No se pudo abrir el dictado por voz.", android.widget.Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    val audioPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        SecurityManager.isRequestingPermission = false
-        if (isGranted) {
-            launchSpeechIntent()
-        } else {
-            android.widget.Toast.makeText(context, "Se requiere permiso de micrófono.", android.widget.Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    val cameraPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        SecurityManager.isRequestingPermission = false
-        if (isGranted) {
-            launchCameraIntent()
-        } else {
-            android.widget.Toast.makeText(context, "Se requiere permiso de cámara.", android.widget.Toast.LENGTH_SHORT).show()
-        }
-    }
 
     if (uiState.showEditActiveSessionDialog) {
         EditActiveSessionDialog(
@@ -555,6 +675,113 @@ fun ParkingMainScreen(
                 itemToResume = null
                 authenticateBeforeAction(requireAuth = true) {
                     viewModel.resumeSessionFromHistory(target)
+                }
+            }
+        )
+    }
+
+    if (uiState.showRechargeOptionsModal) {
+        RechargeOptionsDialog(
+            onDismiss = { viewModel.setShowRechargeOptionsModal(false) },
+            onScanWithCamera = {
+                viewModel.setShowRechargeOptionsModal(false)
+                launchDocumentScanner()
+            },
+            onUploadFromGallery = {
+                viewModel.setShowRechargeOptionsModal(false)
+                launchGalleryReceiptPicker()
+            },
+            onManualInput = {
+                viewModel.setShowRechargeOptionsModal(false)
+                viewModel.setShowRechargeCustomDialog(true)
+            }
+        )
+    }
+
+    if (uiState.showConfirmRechargeDialog && uiState.analyzedReceiptResult != null) {
+        ConfirmRechargeFromAiDialog(
+            result = uiState.analyzedReceiptResult!!,
+            photoPath = uiState.analyzedReceiptPhotoPath ?: "",
+            onViewPhoto = { path ->
+                viewModel.setViewingReceiptPath(path)
+            },
+            onDismiss = { viewModel.dismissConfirmRechargeDialog(deleteAttachedPhoto = true) },
+            onConfirm = { amount, photoPath, note ->
+                viewModel.confirmAndApplyRecharge(
+                    amount = amount,
+                    photoPath = photoPath,
+                    note = note
+                )
+            }
+        )
+    }
+
+    if (uiState.showRechargeHistoryModal) {
+        RechargeHistoryDialog(
+            rechargeList = uiState.rechargeHistory,
+            onDismiss = { viewModel.setShowRechargeHistoryModal(false) },
+            onAddNewRecharge = {
+                viewModel.setShowRechargeHistoryModal(false)
+                viewModel.setShowRechargeOptionsModal(true)
+            },
+            onEditRecharge = { item ->
+                viewModel.requestEditRecharge(item)
+            },
+            onDeleteRecharge = { item ->
+                viewModel.requestDeleteRecharge(item)
+            },
+            onViewReceipt = { path ->
+                viewModel.setViewingReceiptPath(path)
+            }
+        )
+    }
+
+    if (uiState.showEditRechargeDialog && uiState.editingRechargeItem != null) {
+        EditRechargeDialog(
+            item = uiState.editingRechargeItem!!,
+            onDismiss = { viewModel.dismissEditRecharge() },
+            onConfirm = { newAmount, newNote, newTimestamp ->
+                viewModel.confirmEditRecharge(
+                    item = uiState.editingRechargeItem!!,
+                    newAmount = newAmount,
+                    newNote = newNote,
+                    newTimestamp = newTimestamp
+                )
+            }
+        )
+    }
+
+    if (uiState.showDeleteRechargeDialog && uiState.deletingRechargeItem != null) {
+        DeleteRechargeDialog(
+            item = uiState.deletingRechargeItem!!,
+            onDismiss = { viewModel.dismissDeleteRecharge() },
+            onConfirm = {
+                viewModel.confirmDeleteRecharge(uiState.deletingRechargeItem!!)
+            }
+        )
+    }
+
+    uiState.viewingReceiptPath?.let { path ->
+        ReceiptViewerDialog(
+            imagePathOrUri = path,
+            onDismiss = { viewModel.setViewingReceiptPath(null) }
+        )
+    }
+
+    if (showRestoreConfirmDialog && pendingRestoreUri != null) {
+        RestoreBackupConfirmationDialog(
+            onDismiss = {
+                showRestoreConfirmDialog = false
+                pendingRestoreUri = null
+            },
+            onConfirm = {
+                val uriToRestore = pendingRestoreUri
+                showRestoreConfirmDialog = false
+                pendingRestoreUri = null
+                if (uriToRestore != null) {
+                    viewModel.restoreTotalBackup(uriToRestore) { success, message ->
+                        android.widget.Toast.makeText(context, message, if (success) android.widget.Toast.LENGTH_LONG else android.widget.Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         )

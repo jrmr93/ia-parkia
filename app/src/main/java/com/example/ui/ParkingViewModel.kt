@@ -17,6 +17,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import com.example.data.RechargeHistoryItem
+import com.example.util.BackupUtil
+import com.example.util.ReceiptAnalysisResult
+import com.example.util.ReceiptStorageUtil
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -24,12 +28,24 @@ import java.util.Locale
 data class ParkingUiState(
     val config: ParkingConfig = ParkingConfig(),
     val history: List<ParkingHistoryItem> = emptyList(),
+    val rechargeHistory: List<RechargeHistoryItem> = emptyList(),
     val availableTimeFormatted: String = "0m",
     val isLowBalance: Boolean = true,
     val estimatedExhaustionFormatted: String? = null,
     val totalSpentHistorical: Double = 0.0,
     val totalSessionsCount: Int = 0,
     val showRechargeCustomDialog: Boolean = false,
+    val showRechargeOptionsModal: Boolean = false,
+    val showRechargeHistoryModal: Boolean = false,
+    val isAnalyzingReceipt: Boolean = false,
+    val analyzedReceiptResult: com.example.util.ReceiptAnalysisResult? = null,
+    val analyzedReceiptPhotoPath: String? = null,
+    val showConfirmRechargeDialog: Boolean = false,
+    val showEditRechargeDialog: Boolean = false,
+    val editingRechargeItem: RechargeHistoryItem? = null,
+    val showDeleteRechargeDialog: Boolean = false,
+    val deletingRechargeItem: RechargeHistoryItem? = null,
+    val viewingReceiptPath: String? = null,
     val showResetBalanceDialog: Boolean = false,
     val showTariffSettingsDialog: Boolean = false,
     val showResetAllDialog: Boolean = false,
@@ -104,6 +120,13 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                         totalSessionsCount = historyList.size
                     )
                 }
+            }
+        }
+
+        // Collect recharge history updates reactively from Room
+        viewModelScope.launch {
+            repository.rechargeHistoryFlow.collect { recharges ->
+                _uiState.update { it.copy(rechargeHistory = recharges) }
             }
         }
     }
@@ -449,6 +472,7 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             repository.resetAll()
             com.example.util.PhotoStorageManager.clearAllPhotos(getApplication())
+            com.example.util.ReceiptStorageUtil.deleteAllReceiptFiles(getApplication())
             recalculateDerivedValues()
             postRealtimeNotification()
         }
@@ -457,6 +481,267 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
     // Dialog state toggles
     fun setShowRechargeCustomDialog(show: Boolean) {
         _uiState.update { it.copy(showRechargeCustomDialog = show) }
+    }
+
+    fun setShowRechargeOptionsModal(show: Boolean) {
+        _uiState.update { it.copy(showRechargeOptionsModal = show) }
+    }
+
+    fun setShowRechargeHistoryModal(show: Boolean) {
+        _uiState.update { it.copy(showRechargeHistoryModal = show) }
+    }
+
+    fun setViewingReceiptPath(path: String?) {
+        _uiState.update { it.copy(viewingReceiptPath = path) }
+    }
+
+    fun processReceiptImage(bitmap: android.graphics.Bitmap, savedInternalPath: String? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(isAnalyzingReceipt = true) }
+            val effectivePath = savedInternalPath ?: com.example.util.ReceiptStorageUtil.saveReceiptBitmap(getApplication(), bitmap) ?: ""
+            val config = _uiState.value.config
+            val result = try {
+                com.example.util.GeminiAiParser.processReceiptImage(
+                    bitmap = bitmap,
+                    customApiKey = config.customGeminiApiKey,
+                    customModel = config.customGeminiModel,
+                    isGeminiEnabled = config.isGeminiEnabled
+                )
+            } catch (t: Throwable) {
+                com.example.util.ReceiptAnalysisResult(
+                    totalAmount = null,
+                    note = "Comprobante de Recarga",
+                    rawText = "Error analizando comprobante: ${t.localizedMessage ?: t.message}",
+                    usedGemini = false
+                )
+            }
+            _uiState.update {
+                it.copy(
+                    isAnalyzingReceipt = false,
+                    analyzedReceiptResult = result,
+                    analyzedReceiptPhotoPath = effectivePath,
+                    showConfirmRechargeDialog = true
+                )
+            }
+        }
+    }
+
+    fun confirmAndApplyRecharge(
+        amount: Double,
+        photoPath: String,
+        note: String,
+        timestamp: Long = System.currentTimeMillis()
+    ) {
+        viewModelScope.launch {
+            repository.addRechargeRecord(
+                amount = amount,
+                receiptPhotoPath = photoPath,
+                note = note,
+                timestamp = timestamp
+            )
+            _uiState.update {
+                it.copy(
+                    showConfirmRechargeDialog = false,
+                    analyzedReceiptResult = null,
+                    analyzedReceiptPhotoPath = null
+                )
+            }
+            recalculateDerivedValues()
+            postRealtimeNotification()
+        }
+    }
+
+    fun dismissConfirmRechargeDialog(deleteAttachedPhoto: Boolean = false) {
+        val currentPhotoPath = _uiState.value.analyzedReceiptPhotoPath
+        if (deleteAttachedPhoto && !currentPhotoPath.isNullOrBlank()) {
+            com.example.util.ReceiptStorageUtil.deleteReceiptFile(currentPhotoPath)
+        }
+        _uiState.update {
+            it.copy(
+                showConfirmRechargeDialog = false,
+                analyzedReceiptResult = null,
+                analyzedReceiptPhotoPath = null
+            )
+        }
+    }
+
+    fun requestEditRecharge(item: RechargeHistoryItem) {
+        _uiState.update {
+            it.copy(
+                editingRechargeItem = item,
+                showEditRechargeDialog = true
+            )
+        }
+    }
+
+    fun confirmEditRecharge(item: RechargeHistoryItem, newAmount: Double, newNote: String, newTimestamp: Long) {
+        viewModelScope.launch {
+            repository.updateRechargeRecord(item, newAmount, newNote, newTimestamp)
+            _uiState.update {
+                it.copy(
+                    showEditRechargeDialog = false,
+                    editingRechargeItem = null
+                )
+            }
+            recalculateDerivedValues()
+            postRealtimeNotification()
+        }
+    }
+
+    fun dismissEditRecharge() {
+        _uiState.update {
+            it.copy(
+                showEditRechargeDialog = false,
+                editingRechargeItem = null
+            )
+        }
+    }
+
+    fun requestDeleteRecharge(item: RechargeHistoryItem) {
+        _uiState.update {
+            it.copy(
+                deletingRechargeItem = item,
+                showDeleteRechargeDialog = true
+            )
+        }
+    }
+
+    fun confirmDeleteRecharge(item: RechargeHistoryItem) {
+        viewModelScope.launch {
+            repository.deleteRechargeRecord(item)
+            _uiState.update {
+                it.copy(
+                    showDeleteRechargeDialog = false,
+                    deletingRechargeItem = null
+                )
+            }
+            recalculateDerivedValues()
+            postRealtimeNotification()
+        }
+    }
+
+    fun dismissDeleteRecharge() {
+        _uiState.update {
+            it.copy(
+                showDeleteRechargeDialog = false,
+                deletingRechargeItem = null
+            )
+        }
+    }
+
+    // Full system backup & restore
+    fun exportTotalBackup(destinationUri: android.net.Uri, onDone: (Boolean, String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val currentConfig = repository.getOrCreateConfig()
+                val parkingHistory = repository.getAllHistoryList()
+                val rechargeHistory = repository.getAllRechargesList()
+                val context = getApplication<Application>()
+                val outputStream = context.contentResolver.openOutputStream(destinationUri)
+                    ?: throw java.io.IOException("No se pudo abrir el archivo de destino para guardar el respaldo.")
+
+                outputStream.use { os ->
+                    com.example.util.BackupUtil.exportFullBackup(
+                        context = context,
+                        config = currentConfig,
+                        parkingHistory = parkingHistory,
+                        rechargeHistory = rechargeHistory,
+                        outputStream = os
+                    )
+                }
+
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    onDone(true, "¡Respaldo total generado con éxito! (${parkingHistory.size} sesiones, ${rechargeHistory.size} recargas).")
+                }
+            } catch (e: Exception) {
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    onDone(false, "Error al generar respaldo: ${e.localizedMessage ?: e.message}")
+                }
+            }
+        }
+    }
+
+    fun restoreTotalBackup(sourceUri: android.net.Uri, onDone: (Boolean, String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val context = getApplication<Application>()
+                val inputStream = context.contentResolver.openInputStream(sourceUri)
+                    ?: throw java.io.IOException("No se pudo abrir el archivo de respaldo seleccionado.")
+
+                val parsed = inputStream.use { stream ->
+                    com.example.util.BackupUtil.restoreFullBackup(context, stream)
+                }
+
+                repository.restoreAllData(
+                    restoredConfig = parsed.config,
+                    parkingHistory = parsed.parkingHistory,
+                    rechargeHistory = parsed.rechargeHistory
+                )
+                com.example.util.SecurityManager.setQuickTileBiometricEnabled(getApplication(), parsed.config.quickTileBiometricEnabled)
+                com.example.util.SecurityManager.setGlobalAuthEnabled(getApplication(), parsed.config.globalSecurityAuthEnabled)
+                recalculateDerivedValues()
+                postRealtimeNotification()
+                com.example.service.ParkiaTileService.updateQuickTileState(getApplication())
+
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    onDone(true, "¡Respaldo restaurado con éxito! (${parsed.parkingHistory.size} sesiones, ${parsed.rechargeHistory.size} recargas, ${parsed.photosCount} fotos, ${parsed.receiptsCount} comprobantes).")
+                }
+            } catch (e: Exception) {
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    onDone(false, "Error al restaurar respaldo: ${e.localizedMessage ?: e.message}")
+                }
+            }
+        }
+    }
+
+    fun exportTotalBackup(outputStream: java.io.OutputStream, onDone: (Boolean, String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val currentConfig = repository.getOrCreateConfig()
+                val parkingHistory = repository.getAllHistoryList()
+                val rechargeHistory = repository.getAllRechargesList()
+                com.example.util.BackupUtil.exportFullBackup(
+                    context = getApplication(),
+                    config = currentConfig,
+                    parkingHistory = parkingHistory,
+                    rechargeHistory = rechargeHistory,
+                    outputStream = outputStream
+                )
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    onDone(true, "Respaldo total generado con éxito (${parkingHistory.size} sesiones, ${rechargeHistory.size} recargas).")
+                }
+            } catch (e: Exception) {
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    onDone(false, "Error al generar respaldo: ${e.localizedMessage ?: e.message}")
+                }
+            }
+        }
+    }
+
+    fun restoreTotalBackup(inputStream: java.io.InputStream, onDone: (Boolean, String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val parsed = com.example.util.BackupUtil.restoreFullBackup(getApplication(), inputStream)
+                repository.restoreAllData(
+                    restoredConfig = parsed.config,
+                    parkingHistory = parsed.parkingHistory,
+                    rechargeHistory = parsed.rechargeHistory
+                )
+                com.example.util.SecurityManager.setQuickTileBiometricEnabled(getApplication(), parsed.config.quickTileBiometricEnabled)
+                com.example.util.SecurityManager.setGlobalAuthEnabled(getApplication(), parsed.config.globalSecurityAuthEnabled)
+                recalculateDerivedValues()
+                postRealtimeNotification()
+                com.example.service.ParkiaTileService.updateQuickTileState(getApplication())
+
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    onDone(true, "¡Respaldo restaurado con éxito! (${parsed.parkingHistory.size} sesiones, ${parsed.rechargeHistory.size} recargas, ${parsed.photosCount} fotos, ${parsed.receiptsCount} comprobantes).")
+                }
+            } catch (e: Exception) {
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    onDone(false, "Error al restaurar respaldo: ${e.localizedMessage ?: e.message}")
+                }
+            }
+        }
     }
 
     fun setShowResetBalanceDialog(show: Boolean) {

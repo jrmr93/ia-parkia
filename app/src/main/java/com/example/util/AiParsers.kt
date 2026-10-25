@@ -27,6 +27,15 @@ data class AiRecognitionResult(
     val engineDetail: String? = null
 )
 
+data class ReceiptAnalysisResult(
+    val totalAmount: Double? = null,
+    val note: String = "",
+    val rawText: String = "",
+    val usedGemini: Boolean = false,
+    val engineName: String = "Fallback Local",
+    val engineDetail: String? = null
+)
+
 object GeminiAiParser {
 
     private val httpClient = OkHttpClient.Builder()
@@ -354,6 +363,142 @@ object GeminiAiParser {
                     rawText = "Foto capturada sin texto detectado (${t.localizedMessage ?: t.message ?: t.javaClass.simpleName})"
                 )
             }
+        }
+    }
+
+    suspend fun processReceiptImage(
+        bitmap: Bitmap,
+        customApiKey: String? = null,
+        customModel: String? = null,
+        isGeminiEnabled: Boolean = true
+    ): ReceiptAnalysisResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        if (!isGeminiEnabled) {
+            val localResult = processReceiptLocal(bitmap)
+            return@withContext localResult.copy(
+                usedGemini = false,
+                engineName = "Fallback Local (ML Kit OCR)",
+                engineDetail = "La API de Gemini IA está desactivada en la configuración de la app."
+            )
+        }
+        val cleanKey = customApiKey?.trim()
+        val apiKey = if (!cleanKey.isNullOrBlank() && cleanKey != "DEFAULT_KEY") cleanKey else BuildConfig.GEMINI_API_KEY.trim()
+        var lastError: String? = if (apiKey.isBlank() || apiKey == "DEFAULT_KEY") "GEMINI_API_KEY no configurada" else null
+
+        if (!apiKey.isBlank() && apiKey != "DEFAULT_KEY") {
+            val base64Image = bitmapToBase64(bitmap)
+            val promptText = """
+                Analiza esta imagen de un comprobante de recarga de saldo, recibo de depósito o voucher bancario.
+                Extrae ÚNICAMENTE el saldo total o monto total pagado/recargado (ejemplo: 15.50) y un detalle corto para la nota (ejemplo: "Banco Pichincha - Recarga", "Transferencia DeUna", "Comprobante #1234").
+                Responde ÚNICAMENTE en formato JSON con la siguiente estructura:
+                {
+                  "totalAmount": 15.50,
+                  "note": "Banco Pichincha - Recarga",
+                  "rawText": "Texto detectado en el comprobante"
+                }
+            """.trimIndent()
+
+            val jsonPayload = JSONObject().apply {
+                put("contents", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("parts", JSONArray().apply {
+                            put(JSONObject().apply { put("text", promptText) })
+                            put(JSONObject().apply {
+                                put("inline_data", JSONObject().apply {
+                                    put("mime_type", "image/jpeg")
+                                    put("data", base64Image)
+                                })
+                            })
+                        })
+                    })
+                })
+            }
+
+            val modelsToTry = getModelsToTry(customModel)
+            for (modelName in modelsToTry) {
+                try {
+                    val url = "https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey"
+                    val requestBody = jsonPayload.toString().toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+                    val request = Request.Builder().url(url).post(requestBody).build()
+
+                    httpClient.newCall(request).execute().use { response ->
+                        val respBody = response.body?.string() ?: ""
+                        if (response.isSuccessful) {
+                            val json = JSONObject(respBody)
+                            val responseText = extractTextFromJson(json)
+                            val jsonStart = responseText.indexOf("{")
+                            val jsonEnd = responseText.lastIndexOf("}")
+                            if (jsonStart != -1 && jsonEnd != -1) {
+                                val jsonString = responseText.substring(jsonStart, jsonEnd + 1)
+                                val parsedJson = JSONObject(jsonString)
+                                val total = if (parsedJson.has("totalAmount") && !parsedJson.isNull("totalAmount")) {
+                                    parsedJson.getDouble("totalAmount")
+                                } else if (parsedJson.has("balance") && !parsedJson.isNull("balance")) {
+                                    parsedJson.getDouble("balance")
+                                } else null
+                                val note = parsedJson.optString("note", "")
+                                val raw = parsedJson.optString("rawText", responseText)
+
+                                return@withContext ReceiptAnalysisResult(
+                                    totalAmount = total,
+                                    note = note,
+                                    rawText = raw,
+                                    usedGemini = true,
+                                    engineName = "Gemini IA ($modelName)"
+                                )
+                            }
+                        } else {
+                            val err = extractErrorMessageFromJson(respBody) ?: "HTTP ${response.code}"
+                            lastError = "($modelName): $err"
+                        }
+                    }
+                } catch (t: Throwable) {
+                    t.printStackTrace()
+                    lastError = "($modelName): ${t.localizedMessage ?: t.message ?: t.javaClass.simpleName}"
+                }
+            }
+        }
+
+        val localResult = processReceiptLocal(bitmap)
+        return@withContext localResult.copy(
+            usedGemini = false,
+            engineName = "Fallback Local (ML Kit OCR)",
+            engineDetail = lastError
+        )
+    }
+
+    suspend fun processReceiptLocal(bitmap: Bitmap): ReceiptAnalysisResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            val image = InputImage.fromBitmap(bitmap, 0)
+            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+            val visionText = com.google.android.gms.tasks.Tasks.await(recognizer.process(image))
+            val fullText = visionText.text
+            val parsedResult = VisionAiParser.parseExtractedText(fullText)
+
+            var note = "Comprobante de Recarga"
+            val lower = fullText.lowercase(Locale.getDefault())
+            if (lower.contains("pichincha")) note = "Banco Pichincha"
+            else if (lower.contains("guayaquil")) note = "Banco Guayaquil"
+            else if (lower.contains("produbanco")) note = "Produbanco"
+            else if (lower.contains("pacifico") || lower.contains("pacífico")) note = "Banco del Pacífico"
+            else if (lower.contains("deuna") || lower.contains("de una")) note = "DeUna"
+            else if (lower.contains("transferencia")) note = "Transferencia Bancaria"
+            else if (lower.contains("deposito") || lower.contains("depósito")) note = "Depósito Bancario"
+
+            ReceiptAnalysisResult(
+                totalAmount = parsedResult.balance,
+                note = note,
+                rawText = fullText.ifBlank { "Comprobante procesado localmente" },
+                usedGemini = false,
+                engineName = "Fallback Local (ML Kit OCR)"
+            )
+        } catch (t: Throwable) {
+            ReceiptAnalysisResult(
+                totalAmount = null,
+                note = "Recarga de saldo",
+                rawText = "No se pudo leer texto: ${t.localizedMessage ?: t.message}",
+                usedGemini = false,
+                engineName = "Fallback Local (ML Kit OCR)"
+            )
         }
     }
 

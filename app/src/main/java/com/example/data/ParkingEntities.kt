@@ -49,3 +49,13 @@ data class ParkingHistoryItem(
     val photoPath: String = "",
     val initialBalance: Double = 0.0
 )
+
+@Entity(tableName = "recharge_history")
+data class RechargeHistoryItem(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0L,
+    val amount: Double,
+    val timestamp: Long = System.currentTimeMillis(),
+    val receiptPhotoPath: String = "",
+    val note: String = ""
+)

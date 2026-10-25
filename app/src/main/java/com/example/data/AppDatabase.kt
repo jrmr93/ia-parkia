@@ -6,8 +6,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [ParkingConfig::class, ParkingHistoryItem::class],
-    version = 14,
+    entities = [ParkingConfig::class, ParkingHistoryItem::class, RechargeHistoryItem::class],
+    version = 15,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
