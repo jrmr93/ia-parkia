@@ -1401,7 +1401,7 @@ fun RestoreBackupConfirmationDialog(
         },
         text = {
             Text(
-                "Esta acción reemplazará la base de datos actual, historial de sesiones, saldo, comprobantes de recarga y ajustes con la información contenida en el archivo de respaldo seleccionado.\n\n¿Deseas continuar?",
+                "Esta acción restaurará toda la configuración del sistema (tarifas, minutos por bloque, notificaciones, autenticación, API key y modelo de Gemini, geocerca, PIN), así como el saldo actual, comprobantes de recarga e historial de sesiones.\n\n¿Deseas continuar?",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color(0xFF334155)
             )

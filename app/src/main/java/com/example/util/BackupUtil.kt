@@ -90,7 +90,6 @@ object BackupUtil {
                 put("nfcStrictMatchingEnabled", config.nfcStrictMatchingEnabled)
                 put("lastSessionPhotoFileName", if (config.lastSessionPhotoPath.isNotBlank()) File(config.lastSessionPhotoPath).name else "")
             }
-            root.put("config", configObj)
 
             // 2. Exportar Preferencias de Seguridad y PIN
             val prefs = context.getSharedPreferences("parkia_security_prefs", Context.MODE_PRIVATE)
@@ -105,6 +104,12 @@ object BackupUtil {
                     is String -> prefsObj.put(key, value)
                 }
             }
+            val currentPin = prefs.getString("security_pin", null)
+            if (!currentPin.isNullOrBlank()) {
+                prefsObj.put("security_pin", currentPin)
+                configObj.put("security_pin", currentPin)
+            }
+            root.put("config", configObj)
             root.put("security_preferences", prefsObj)
 
             // 3. Exportar Historial de Sesiones de Parqueo
@@ -281,10 +286,12 @@ object BackupUtil {
 
         // Restaurar preferencias de seguridad y PIN
         val parsedPreferences = mutableMapOf<String, Any?>()
+        val appPrefs = context.getSharedPreferences("parkia_security_prefs", Context.MODE_PRIVATE)
+        val editor = appPrefs.edit()
+        editor.clear()
+
         val prefsObj = root.optJSONObject("security_preferences")
         if (prefsObj != null) {
-            val appPrefs = context.getSharedPreferences("parkia_security_prefs", Context.MODE_PRIVATE)
-            val editor = appPrefs.edit()
             val keys = prefsObj.keys()
             while (keys.hasNext()) {
                 val k = keys.next()
@@ -292,17 +299,25 @@ object BackupUtil {
                 parsedPreferences[k] = v
                 when (v) {
                     is Boolean -> editor.putBoolean(k, v)
+                    is String -> editor.putString(k, v)
                     is Int -> editor.putInt(k, v)
                     is Long -> editor.putLong(k, v)
+                    is Float -> editor.putFloat(k, v)
                     is Double -> editor.putFloat(k, v.toFloat())
-                    is String -> editor.putString(k, v)
+                    is Number -> editor.putFloat(k, v.toFloat())
                 }
             }
-            editor.apply()
         }
 
-        // Restaurar Configuración
         val configObj = root.optJSONObject("config") ?: JSONObject()
+        val configPin = configObj.optString("security_pin", "")
+        if (configPin.isNotBlank() && !parsedPreferences.containsKey("security_pin")) {
+            parsedPreferences["security_pin"] = configPin
+            editor.putString("security_pin", configPin)
+        }
+        editor.apply()
+
+        // Restaurar Configuración
         val lastPhotoName = configObj.optString("lastSessionPhotoFileName", "")
         val restoredLastPhotoPath = if (lastPhotoName.isNotBlank()) {
             val f = File(photosDir, lastPhotoName)

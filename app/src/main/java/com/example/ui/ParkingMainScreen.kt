@@ -778,6 +778,7 @@ fun ParkingMainScreen(
                 val uriToRestore = pendingRestoreUri
                 showRestoreConfirmDialog = false
                 pendingRestoreUri = null
+                viewModel.setShowTariffSettingsDialog(false)
                 if (uriToRestore != null) {
                     viewModel.restoreTotalBackup(uriToRestore) { success, message ->
                         android.widget.Toast.makeText(context, message, if (success) android.widget.Toast.LENGTH_LONG else android.widget.Toast.LENGTH_SHORT).show()

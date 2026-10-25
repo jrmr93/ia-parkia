@@ -182,4 +182,94 @@ class RechargeAndBackupTest {
         val res2 = VisionAiParser.parseExtractedText(rawOcrSample2)
         assertEquals(120.50, res2.balance ?: 0.0, 0.01)
     }
+
+    @Test
+    fun testBackupExportAndRestoreAllConfigurationParameters() = runBlocking {
+        // Guardar PIN y configuraciones de seguridad previas
+        com.example.util.SecurityManager.savePin(context, "8921")
+        com.example.util.SecurityManager.setQuickTileBiometricEnabled(context, false)
+        com.example.util.SecurityManager.setGlobalAuthEnabled(context, true)
+
+        val fullConfig = repository.getOrCreateConfig().copy(
+            balance = 15.75,
+            rateAmount = 0.50,
+            rateMinutes = 45,
+            notificationsEnabled = false,
+            notificationIntervalMinutes = 15,
+            tileLabel = "Mi Cochera",
+            customGeminiApiKey = "AIzaSySecretApiKey12345",
+            customGeminiModel = "gemini-2.0-flash",
+            isGeminiEnabled = true,
+            quickTileBiometricEnabled = false,
+            globalSecurityAuthEnabled = true,
+            ttsAnnouncementsEnabled = false,
+            geofenceEnabled = true,
+            geofenceLatitude = -2.189412,
+            geofenceLongitude = -79.889064,
+            geofenceRadiusMeters = 250f,
+            registeredNfcTagId = "04:D3:55:A1",
+            nfcStrictMatchingEnabled = true
+        )
+        db.parkingDao().saveConfig(fullConfig)
+
+        val outStream = ByteArrayOutputStream()
+        BackupUtil.exportFullBackup(
+            context = context,
+            config = fullConfig,
+            parkingHistory = emptyList(),
+            rechargeHistory = emptyList(),
+            outputStream = outStream
+        )
+        assertTrue(outStream.size() > 0)
+
+        // Limpiar todas las configuraciones actuales y PIN
+        db.parkingDao().clearAllHistory()
+        db.parkingDao().clearAllRecharges()
+        db.parkingDao().saveConfig(com.example.data.ParkingConfig(id = 1))
+        context.getSharedPreferences("parkia_security_prefs", Context.MODE_PRIVATE).edit().clear().apply()
+
+        // Verificar que quedó reseteado a valores por defecto
+        val blankConfig = repository.getOrCreateConfig()
+        assertEquals(0.10, blankConfig.rateAmount, 0.001)
+        assertEquals(30, blankConfig.rateMinutes)
+        assertEquals("", blankConfig.customGeminiApiKey)
+        assertTrue(com.example.util.SecurityManager.verifyPin(context, "8921") == false)
+
+        // Restaurar respaldo completo
+        val inStream = ByteArrayInputStream(outStream.toByteArray())
+        val parsed = BackupUtil.restoreFullBackup(context, inStream)
+
+        repository.restoreAllData(
+            restoredConfig = parsed.config,
+            parkingHistory = parsed.parkingHistory,
+            rechargeHistory = parsed.rechargeHistory
+        )
+
+        // Verificar que absolutamente todos los parámetros de configuración se restauraron
+        val restored = repository.getOrCreateConfig()
+        assertEquals(15.75, restored.balance, 0.001)
+        assertEquals(0.50, restored.rateAmount, 0.001)
+        assertEquals(45, restored.rateMinutes)
+        assertEquals(false, restored.notificationsEnabled)
+        assertEquals(15, restored.notificationIntervalMinutes)
+        assertEquals("Mi Cochera", restored.tileLabel)
+        assertEquals("AIzaSySecretApiKey12345", restored.customGeminiApiKey)
+        assertEquals("gemini-2.0-flash", restored.customGeminiModel)
+        assertEquals(true, restored.isGeminiEnabled)
+        assertEquals(false, restored.quickTileBiometricEnabled)
+        assertEquals(true, restored.globalSecurityAuthEnabled)
+        assertEquals(false, restored.ttsAnnouncementsEnabled)
+        assertEquals(true, restored.geofenceEnabled)
+        assertEquals(-2.189412, restored.geofenceLatitude, 0.000001)
+        assertEquals(-79.889064, restored.geofenceLongitude, 0.000001)
+        assertEquals(250f, restored.geofenceRadiusMeters, 0.01f)
+        assertEquals("04:D3:55:A1", restored.registeredNfcTagId)
+        assertEquals(true, restored.nfcStrictMatchingEnabled)
+
+        // Verificar que las credenciales de seguridad y PIN también se restauraron
+        assertTrue(com.example.util.SecurityManager.isPinConfigured(context))
+        assertTrue(com.example.util.SecurityManager.verifyPin(context, "8921"))
+        assertEquals(false, com.example.util.SecurityManager.isQuickTileBiometricEnabled(context))
+        assertEquals(true, com.example.util.SecurityManager.isGlobalAuthEnabled(context))
+    }
 }

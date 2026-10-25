@@ -661,6 +661,83 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    private suspend fun applyRestoredSystemState(parsed: com.example.util.ParsedParkiaBackup) {
+        val app = getApplication<Application>()
+
+        // 1. Restaurar base de datos Room completa (sesiones, recargas y configuración)
+        repository.restoreAllData(
+            restoredConfig = parsed.config,
+            parkingHistory = parsed.parkingHistory,
+            rechargeHistory = parsed.rechargeHistory
+        )
+
+        // 2. Si la sesión restaurada estaba activa, sincronizar el tiempo transcurrido
+        if (parsed.config.isSessionActive) {
+            repository.catchUpSession()
+        }
+
+        val effectiveConfig = repository.getOrCreateConfig()
+
+        // 3. Restaurar y sincronizar preferencias de autenticación y seguridad
+        com.example.util.SecurityManager.setQuickTileBiometricEnabled(app, effectiveConfig.quickTileBiometricEnabled)
+        com.example.util.SecurityManager.setGlobalAuthEnabled(app, effectiveConfig.globalSecurityAuthEnabled)
+        val restoredPin = parsed.preferences["security_pin"] as? String
+        if (!restoredPin.isNullOrBlank()) {
+            com.example.util.SecurityManager.savePin(app, restoredPin)
+        }
+
+        // 4. Configurar Geocerca según el estado restaurado
+        if (effectiveConfig.geofenceEnabled && effectiveConfig.geofenceLatitude != 0.0 && effectiveConfig.geofenceLongitude != 0.0) {
+            com.example.util.GeofenceManager.registerGeofence(
+                context = app,
+                latitude = effectiveConfig.geofenceLatitude,
+                longitude = effectiveConfig.geofenceLongitude,
+                radiusMeters = effectiveConfig.geofenceRadiusMeters
+            )
+        } else {
+            com.example.util.GeofenceManager.removeGeofence(app)
+        }
+
+        // 5. Configurar Servicio en primer plano y alarmas/workers de notificaciones
+        if (effectiveConfig.notificationsEnabled) {
+            com.example.service.ParkiaForegroundService.startOrUpdate(app, forceUpdate = true)
+            com.example.util.BalanceAlarmScheduler.scheduleOrCancel(app, true, effectiveConfig.notificationIntervalMinutes)
+            com.example.util.BalanceNotificationWorker.scheduleOrCancel(app, true, effectiveConfig.notificationIntervalMinutes)
+            postRealtimeNotification()
+        } else {
+            com.example.service.ParkiaForegroundService.stop(app)
+            com.example.util.BalanceAlarmScheduler.scheduleOrCancel(app, false, effectiveConfig.notificationIntervalMinutes)
+            com.example.util.BalanceNotificationWorker.scheduleOrCancel(app, false, effectiveConfig.notificationIntervalMinutes)
+            androidx.core.app.NotificationManagerCompat.from(app).cancel(com.example.util.NotificationHelper.NOTIFICATION_ID)
+        }
+
+        // 6. Actualizar Mosaico de Ajustes Rápidos (Quick Settings Tile)
+        com.example.service.ParkiaTileService.updateQuickTileState(app)
+
+        // 7. Administrar el Ticker de sesión activa (iniciar o detener según estado)
+        manageTicker(effectiveConfig)
+
+        // 8. Actualizar estado de la interfaz de usuario de manera inmediata
+        _uiState.update {
+            it.copy(
+                config = effectiveConfig,
+                history = parsed.parkingHistory,
+                rechargeHistory = parsed.rechargeHistory,
+                totalSpentHistorical = parsed.parkingHistory.sumOf { h -> h.costCharged },
+                totalSessionsCount = parsed.parkingHistory.size,
+                showTariffSettingsDialog = false,
+                isAnalyzingReceipt = false,
+                analyzedReceiptResult = null,
+                analyzedReceiptPhotoPath = null,
+                showConfirmRechargeDialog = false,
+                showEditRechargeDialog = false,
+                showDeleteRechargeDialog = false,
+                viewingReceiptPath = null
+            )
+        }
+        recalculateDerivedValues()
+    }
+
     fun restoreTotalBackup(sourceUri: android.net.Uri, onDone: (Boolean, String) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -672,19 +749,10 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
                     com.example.util.BackupUtil.restoreFullBackup(context, stream)
                 }
 
-                repository.restoreAllData(
-                    restoredConfig = parsed.config,
-                    parkingHistory = parsed.parkingHistory,
-                    rechargeHistory = parsed.rechargeHistory
-                )
-                com.example.util.SecurityManager.setQuickTileBiometricEnabled(getApplication(), parsed.config.quickTileBiometricEnabled)
-                com.example.util.SecurityManager.setGlobalAuthEnabled(getApplication(), parsed.config.globalSecurityAuthEnabled)
-                recalculateDerivedValues()
-                postRealtimeNotification()
-                com.example.service.ParkiaTileService.updateQuickTileState(getApplication())
+                applyRestoredSystemState(parsed)
 
                 kotlinx.coroutines.withContext(Dispatchers.Main) {
-                    onDone(true, "¡Respaldo restaurado con éxito! (${parsed.parkingHistory.size} sesiones, ${parsed.rechargeHistory.size} recargas, ${parsed.photosCount} fotos, ${parsed.receiptsCount} comprobantes).")
+                    onDone(true, "¡Respaldo restaurado con éxito! Se restauraron todas las tarifas, notificaciones, credenciales de IA, seguridad y registros (${parsed.parkingHistory.size} sesiones, ${parsed.rechargeHistory.size} recargas, ${parsed.photosCount} fotos, ${parsed.receiptsCount} comprobantes).")
                 }
             } catch (e: Exception) {
                 kotlinx.coroutines.withContext(Dispatchers.Main) {
@@ -722,19 +790,10 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val parsed = com.example.util.BackupUtil.restoreFullBackup(getApplication(), inputStream)
-                repository.restoreAllData(
-                    restoredConfig = parsed.config,
-                    parkingHistory = parsed.parkingHistory,
-                    rechargeHistory = parsed.rechargeHistory
-                )
-                com.example.util.SecurityManager.setQuickTileBiometricEnabled(getApplication(), parsed.config.quickTileBiometricEnabled)
-                com.example.util.SecurityManager.setGlobalAuthEnabled(getApplication(), parsed.config.globalSecurityAuthEnabled)
-                recalculateDerivedValues()
-                postRealtimeNotification()
-                com.example.service.ParkiaTileService.updateQuickTileState(getApplication())
+                applyRestoredSystemState(parsed)
 
                 kotlinx.coroutines.withContext(Dispatchers.Main) {
-                    onDone(true, "¡Respaldo restaurado con éxito! (${parsed.parkingHistory.size} sesiones, ${parsed.rechargeHistory.size} recargas, ${parsed.photosCount} fotos, ${parsed.receiptsCount} comprobantes).")
+                    onDone(true, "¡Respaldo restaurado con éxito! Se restauraron todas las tarifas, notificaciones, credenciales de IA, seguridad y registros (${parsed.parkingHistory.size} sesiones, ${parsed.rechargeHistory.size} recargas, ${parsed.photosCount} fotos, ${parsed.receiptsCount} comprobantes).")
                 }
             } catch (e: Exception) {
                 kotlinx.coroutines.withContext(Dispatchers.Main) {
