@@ -406,7 +406,7 @@ fun ParkingMainScreen(
                         accumulatedCost = uiState.config.accumulatedCost,
                         rateAmount = uiState.config.rateAmount,
                         rateMinutes = uiState.config.rateMinutes,
-                        onRequestStartSession = { viewModel.requestStartSession() },
+                        onRequestStartSession = { viewModel.setShowQuickTileStartModal(true) },
                         onRequestStopSession = { viewModel.requestStopSession() },
                         onEditActiveSessionClick = { viewModel.setShowEditActiveSessionDialog(true) }
                     )

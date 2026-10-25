@@ -222,12 +222,7 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
 
     // Confirmation Triggers for Start & Stop
     fun requestStartSession() {
-        val config = _uiState.value.config
-        if (config.balance < config.rateAmount || config.rateAmount <= 0.0) {
-            _uiState.update { it.copy(showNoFundsToStartAlert = true) }
-        } else {
-            _uiState.update { it.copy(showConfirmStartDialog = true) }
-        }
+        _uiState.update { it.copy(showQuickTileStartModal = true) }
     }
 
     fun requestStopSession() {
