@@ -25,6 +25,7 @@ class ParkiaForegroundService : Service() {
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
     private var periodicJob: Job? = null
+    private var configObserverJob: Job? = null
     private val dateTimeFormat = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault())
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -32,6 +33,7 @@ class ParkiaForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         NotificationHelper.createNotificationChannel(this)
+        observeConfigChanges()
         val initialNotification = NotificationHelper.buildBalanceNotification(
             context = this,
             balance = 0.0,
@@ -174,9 +176,35 @@ class ParkiaForegroundService : Service() {
         }
     }
 
+    private fun observeConfigChanges() {
+        if (configObserverJob?.isActive == true) return
+        configObserverJob = serviceScope.launch {
+            val repository = ParkingRepository(
+                AppDatabase.getDatabase(applicationContext).parkingDao()
+            )
+            var lastObservedBalance: Double? = null
+            repository.configFlow.collect { cfg ->
+                if (cfg != null && cfg.notificationsEnabled) {
+                    val balanceChanged = lastObservedBalance != null && Math.abs((lastObservedBalance ?: 0.0) - cfg.balance) > 0.0001
+                    lastObservedBalance = cfg.balance
+                    if (balanceChanged) {
+                        val nowFormatted = dateTimeFormat.format(Date())
+                        NotificationHelper.showBalanceNotification(
+                            context = applicationContext,
+                            balance = cfg.balance,
+                            isSessionActive = cfg.isSessionActive,
+                            formattedDateTime = nowFormatted
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         periodicJob?.cancel()
+        configObserverJob?.cancel()
         serviceScope.launch {
             try {
                 val repository = ParkingRepository(

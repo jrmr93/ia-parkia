@@ -45,9 +45,11 @@ mapsCompose = "4.3.3"
 playServicesMaps = "19.0.0"
 androidxCarApp = "1.4.0"
 mlkitDocumentScanner = "16.0.0-beta1"
+hyperislandKit = "0.4.5"
 
 
 [libraries]
+hyperisland-kit = { group = "io.github.d4viddf", name = "hyperisland_kit", version.ref = "hyperislandKit" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }

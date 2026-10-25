@@ -37,6 +37,151 @@ object NotificationHelper {
         }
     }
 
+    var isHyperIslandForcedForTesting: Boolean? = null
+
+    fun formatHyperIslandBalance(balance: Double): String {
+        val isDebt = balance < -0.0001
+        val formattedAmount = String.format(Locale.US, "%.2f", if (isDebt) -balance else balance)
+        return if (isDebt) "-$$formattedAmount" else "$$formattedAmount"
+    }
+
+    fun isHyperIslandSupported(context: Context): Boolean {
+        isHyperIslandForcedForTesting?.let { return it }
+        return try {
+            if (io.github.d4viddf.hyperisland_kit.HyperIslandNotification.isSupported(context)) {
+                return true
+            }
+            if (isXiaomiHyperOsDevice()) {
+                val hasFocusPermission = try {
+                    val bundle = context.contentResolver.call(
+                        android.net.Uri.parse("content://miui.statusbar.notification.public"),
+                        "canShowFocus",
+                        null,
+                        android.os.Bundle()
+                    )
+                    bundle?.getBoolean("canShowFocus", false) ?: false
+                } catch (_: Throwable) {
+                    false
+                }
+                val isIslandProp = try {
+                    val spClass = Class.forName("android.os.SystemProperties")
+                    val getBooleanMethod = spClass.getMethod("getBoolean", String::class.java, Boolean::class.javaPrimitiveType)
+                    (getBooleanMethod.invoke(null, "persist.sys.feature.island", false) as? Boolean ?: false) ||
+                    (getBooleanMethod.invoke(null, "ro.feature.island", false) as? Boolean ?: false)
+                } catch (_: Throwable) {
+                    false
+                }
+                hasFocusPermission && isIslandProp
+            } else {
+                false
+            }
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    private fun isXiaomiHyperOsDevice(): Boolean {
+        val manufacturer = Build.MANUFACTURER.lowercase(Locale.ROOT)
+        val isXiaomiFamily = manufacturer.contains("xiaomi") || manufacturer.contains("redmi") || manufacturer.contains("poco")
+        if (!isXiaomiFamily) return false
+        return try {
+            val spClass = Class.forName("android.os.SystemProperties")
+            val getMethod = spClass.getMethod("get", String::class.java, String::class.java)
+            val miOs = getMethod.invoke(null, "ro.mi.os.version.name", "") as? String ?: ""
+            val miui = getMethod.invoke(null, "ro.miui.ui.version.name", "") as? String ?: ""
+            miOs.isNotBlank() || miui.isNotBlank()
+        } catch (_: Throwable) {
+            isXiaomiFamily
+        }
+    }
+
+    fun applyHyperIsland(
+        context: Context,
+        builder: NotificationCompat.Builder,
+        balanceOnlyText: String,
+        isDebt: Boolean = false
+    ) {
+        try {
+            val carIcon = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                android.graphics.drawable.Icon.createWithResource(context, R.drawable.ic_car)
+            } else null
+
+            val subtitle = if (isDebt) "Deuda pendiente" else "Saldo disponible"
+
+            val hyperBuilder = io.github.d4viddf.hyperisland_kit.HyperIslandNotification.Builder(context, "Parkia", balanceOnlyText)
+                .setEnableFloat(true)
+                .setShowNotification(true)
+                .setIslandFirstFloat(true)
+                .setBaseInfo(
+                    title = balanceOnlyText,
+                    content = subtitle
+                )
+
+            if (carIcon != null) {
+                hyperBuilder.addPicture(io.github.d4viddf.hyperisland_kit.HyperPicture("car_icon", carIcon))
+                hyperBuilder.setTickerIcon(carIcon)
+            }
+
+            // Status bar pill / capsule around camera punch-hole cutout (Dynamic Island)
+            hyperBuilder.setSmallIsland("car_icon")
+
+            // Floating expanded island card matching Super Island layout
+            val imgTextLeft = io.github.d4viddf.hyperisland_kit.models.ImageTextInfoLeft(
+                type = 1,
+                picInfo = io.github.d4viddf.hyperisland_kit.models.PicInfo(
+                    type = 1,
+                    pic = "car_icon"
+                ),
+                textInfo = io.github.d4viddf.hyperisland_kit.models.TextInfo(
+                    title = balanceOnlyText,
+                    content = subtitle
+                ),
+                progressInfo = null
+            )
+            hyperBuilder.setBigIslandInfo(
+                imgTextLeft,
+                null,
+                null,
+                null,
+                null
+            )
+
+            hyperBuilder.setIslandConfig(
+                2,
+                null,
+                false,
+                false,
+                null,
+                null,
+                false
+            )
+
+            val jsonParam = hyperBuilder.buildJsonParam()
+            val resourceBundle = hyperBuilder.buildResourceBundle()
+            val customExtras = hyperBuilder.buildCustomExtras()
+
+            builder.addExtras(resourceBundle)
+            builder.addExtras(customExtras)
+            builder.extras.putString("miui.focus.param", jsonParam)
+            builder.extras.putBoolean("miui.enableFloat", true)
+            builder.extras.putString("miui.focus.ticker", balanceOnlyText)
+            builder.extras.putBoolean("miui.focus.show_notification", true)
+            builder.extras.putBoolean("miui.focus.updatable", true)
+            builder.extras.putBoolean("miui.focus.island_first_float", true)
+
+            if (carIcon != null) {
+                builder.extras.putParcelable("miui.focus.pic_car_icon", carIcon)
+                builder.extras.putParcelable("miui.focus.pic_ticker", carIcon)
+                val picsBundle = builder.extras.getBundle("miui.focus.pics") ?: android.os.Bundle()
+                picsBundle.putParcelable("miui.focus.pic_car_icon", carIcon)
+                picsBundle.putParcelable("miui.focus.pic_ticker", carIcon)
+                builder.extras.putBundle("miui.focus.pics", picsBundle)
+            }
+        } catch (t: Throwable) {
+            android.util.Log.w("NotificationHelper", "Failed to configure HyperIsland notification", t)
+        }
+    }
+
     fun buildBalanceNotification(
         context: Context,
         balance: Double,
@@ -51,6 +196,7 @@ object NotificationHelper {
             else -> "En Reposo"
         }
         val formattedAmount = String.format(Locale.US, "%.2f", if (isDebt) -balance else balance)
+        val balanceOnlyText = if (isDebt) "-$$formattedAmount" else "$$formattedAmount"
         val balanceText = if (isDebt) "-$$formattedAmount USD" else "$$formattedAmount USD"
         val titleText = if (isDebt) "Parkia - Deuda: $balanceText" else "Parkia - Saldo: $balanceText"
 
@@ -75,7 +221,7 @@ object NotificationHelper {
             "Saldo disponible: $balanceText\nEstado: $stateText\nÚltima actualización: $formattedDateTime"
         }
 
-        return NotificationCompat.Builder(context, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_car)
             .setContentTitle(titleText)
             .setContentText(contentText)
@@ -85,7 +231,14 @@ object NotificationHelper {
             .setOngoing(true)
             .setContentIntent(pendingIntent)
             .setOnlyAlertOnce(true)
-            .build()
+
+        // Compatible with Xiaomi HyperOS HyperIsland: displays strictly user balance (e.g. $25.50)
+        // Keeps conventional notification as alternative for incompatible devices
+        if (isHyperIslandSupported(context)) {
+            applyHyperIsland(context, builder, balanceOnlyText, isDebt)
+        }
+
+        return builder.build()
     }
 
     fun showBalanceNotification(

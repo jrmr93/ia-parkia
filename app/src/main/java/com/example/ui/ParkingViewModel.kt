@@ -97,14 +97,22 @@ class ParkingViewModel(application: Application) : AndroidViewModel(application)
 
         // Collect config updates reactively from Room for UI screen updates
         viewModelScope.launch {
+            var lastObservedBalance: Double? = null
             repository.configFlow.collect { updatedConfig ->
                 if (updatedConfig != null) {
+                    val balanceChanged = lastObservedBalance != null && Math.abs((lastObservedBalance ?: 0.0) - updatedConfig.balance) > 0.0001
+                    lastObservedBalance = updatedConfig.balance
+
                     _uiState.update { it.copy(config = updatedConfig) }
                     com.example.util.SecurityManager.setQuickTileBiometricEnabled(getApplication(), updatedConfig.quickTileBiometricEnabled)
                     com.example.util.SecurityManager.setGlobalAuthEnabled(getApplication(), updatedConfig.globalSecurityAuthEnabled)
                     recalculateDerivedValues()
                     manageTicker(updatedConfig)
                     com.example.service.ParkiaTileService.updateQuickTileState(getApplication())
+
+                    if (updatedConfig.notificationsEnabled && balanceChanged) {
+                        postRealtimeNotification()
+                    }
                 }
             }
         }
