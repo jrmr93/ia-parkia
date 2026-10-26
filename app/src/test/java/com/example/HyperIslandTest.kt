@@ -208,6 +208,9 @@ class HyperIslandTest {
         assertNotNull("Notification must have deleteIntent attached to intercept swipe dismissal", notification.deleteIntent)
         assertTrue("Notification must have FLAG_ONGOING_EVENT set", (notification.flags and Notification.FLAG_ONGOING_EVENT) != 0)
         assertTrue("Notification must have FLAG_NO_CLEAR set to avoid accidental clearing", (notification.flags and Notification.FLAG_NO_CLEAR) != 0)
+        assertTrue("Notification must have FLAG_FOREGROUND_SERVICE set", (notification.flags and Notification.FLAG_FOREGROUND_SERVICE) != 0)
+        assertFalse("HyperIsland must have cancel = false so user cannot close it from island", notification.extras.getBoolean("miui.focus.cancel", true))
+        assertTrue("HyperIsland must have reopen = true", notification.extras.getBoolean("miui.focus.reopen", false))
     }
 
     @Test
@@ -251,5 +254,35 @@ class HyperIslandTest {
             formattedDateTime = "25/10/2026 14:02:00"
         )
         assertTrue("Subsequent updates must have updatable = true", normalUpdateNotification.extras.getBoolean("miui.focus.updatable", false))
+        val rootJson = JSONObject(normalUpdateNotification.extras.getString("miui.focus.param")!!)
+        val paramV2 = rootJson.getJSONObject("param_v2")
+        assertTrue("param_v2 in JSON must be updatable = true so HyperOS applies periodic updates", paramV2.getBoolean("updatable"))
+    }
+
+    @Test
+    fun `hyperIsland is locked against swipe dismiss and marked as ongoing focus notification`() {
+        NotificationHelper.isHyperIslandForcedForTesting = true
+
+        val notification = NotificationHelper.buildBalanceNotification(
+            context = context,
+            balance = 20.00,
+            isSessionActive = false,
+            formattedDateTime = "25/10/2026 14:00:00"
+        )
+
+        assertFalse("miui.focus.slide_dismiss must be false", notification.extras.getBoolean("miui.focus.slide_dismiss", true))
+        assertFalse("miui.focus.dismiss_island must be false", notification.extras.getBoolean("miui.focus.dismiss_island", true))
+        assertFalse("miui.focus.can_slide must be false", notification.extras.getBoolean("miui.focus.can_slide", true))
+        assertFalse("miui.focus.allow_dismiss must be false", notification.extras.getBoolean("miui.focus.allow_dismiss", true))
+
+        val rootJson = JSONObject(notification.extras.getString("miui.focus.param")!!)
+        val paramV2 = rootJson.getJSONObject("param_v2")
+        val paramIsland = paramV2.getJSONObject("param_island")
+
+        assertEquals("islandProperty must be 1 (ongoing persistent island)", 1, paramIsland.getInt("islandProperty"))
+        assertFalse("dismissIsland must be false", paramIsland.getBoolean("dismissIsland"))
+        assertFalse("slideDismiss must be false so swiping does not hide island", paramIsland.getBoolean("slideDismiss"))
+        assertFalse("canDismiss must be false", paramIsland.getBoolean("canDismiss"))
+        assertFalse("allowDismiss must be false", paramIsland.getBoolean("allowDismiss"))
     }
 }

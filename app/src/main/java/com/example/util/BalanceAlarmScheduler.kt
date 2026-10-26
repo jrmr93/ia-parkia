@@ -26,7 +26,7 @@ object BalanceAlarmScheduler {
             alarmManager.cancel(pendingIntent)
         } else {
             val interval = intervalMinutes.coerceAtLeast(1)
-            val triggerAtMillis = System.currentTimeMillis() + (interval * 60_000L)
+            val triggerAtMillis = android.os.SystemClock.elapsedRealtime() + (interval * 60_000L)
             scheduleAlarm(alarmManager, triggerAtMillis, pendingIntent)
         }
     }
@@ -43,7 +43,7 @@ object BalanceAlarmScheduler {
         val pendingIntent = PendingIntent.getBroadcast(context, REQUEST_CODE, intent, flags)
 
         val interval = intervalMinutes.coerceAtLeast(1)
-        val triggerAtMillis = System.currentTimeMillis() + (interval * 60_000L)
+        val triggerAtMillis = android.os.SystemClock.elapsedRealtime() + (interval * 60_000L)
         scheduleAlarm(alarmManager, triggerAtMillis, pendingIntent)
     }
 
@@ -52,19 +52,19 @@ object BalanceAlarmScheduler {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     if (alarmManager.canScheduleExactAlarms()) {
-                        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+                        alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAtMillis, pendingIntent)
                     } else {
-                        alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+                        alarmManager.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAtMillis, pendingIntent)
                     }
                 } else {
-                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAtMillis, pendingIntent)
                 }
             } else {
-                alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+                alarmManager.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAtMillis, pendingIntent)
             }
         } catch (_: SecurityException) {
             try {
-                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+                alarmManager.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAtMillis, pendingIntent)
             } catch (_: Throwable) {
             }
         } catch (_: Throwable) {

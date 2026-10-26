@@ -1,14 +1,18 @@
 package com.example.service
 
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import com.example.data.AppDatabase
 import com.example.data.ParkingRepository
+import com.example.receiver.BalanceAlarmReceiver
 import com.example.util.BalanceAlarmScheduler
 import com.example.util.NotificationHelper
 import kotlinx.coroutines.CoroutineScope
@@ -135,23 +139,21 @@ class ParkiaForegroundService : Service() {
         formattedDateTime: String
     ) {
         val targetId = NotificationHelper.currentNotificationId
-        if (NotificationHelper.isDismissedByUser) {
-            val freshNotification = NotificationHelper.buildBalanceNotification(
-                context = applicationContext,
-                balance = balance,
-                isSessionActive = isSessionActive,
-                formattedDateTime = formattedDateTime
-            )
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    val serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-                    startForeground(targetId, freshNotification, serviceType)
-                } else {
-                    startForeground(targetId, freshNotification)
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
+        val freshNotification = NotificationHelper.buildBalanceNotification(
+            context = applicationContext,
+            balance = balance,
+            isSessionActive = isSessionActive,
+            formattedDateTime = formattedDateTime
+        )
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                val serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                startForeground(targetId, freshNotification, serviceType)
+            } else {
+                startForeground(targetId, freshNotification)
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
         NotificationHelper.showBalanceNotification(
             context = applicationContext,
@@ -182,6 +184,29 @@ class ParkiaForegroundService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
+        try {
+            val restartIntent = Intent(applicationContext, BalanceAlarmReceiver::class.java).apply {
+                action = BalanceAlarmReceiver.ACTION_BALANCE_ALARM_TICK
+            }
+            val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            val pendingIntent = PendingIntent.getBroadcast(applicationContext, 4004, restartIntent, flags)
+            val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager?.setExactAndAllowWhileIdle(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + 1000L,
+                    pendingIntent
+                )
+            } else {
+                alarmManager?.set(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + 1000L,
+                    pendingIntent
+                )
+            }
+        } catch (_: Throwable) {
+        }
+
         serviceScope.launch {
             try {
                 val repository = ParkingRepository(
@@ -248,6 +273,30 @@ class ParkiaForegroundService : Service() {
                         formattedDateTime = nowFormatted
                     )
                     BalanceAlarmScheduler.scheduleNext(applicationContext, config.notificationIntervalMinutes)
+
+                    // Ensure service resurrection via AlarmManager if terminated by OS
+                    try {
+                        val restartIntent = Intent(applicationContext, BalanceAlarmReceiver::class.java).apply {
+                            action = BalanceAlarmReceiver.ACTION_BALANCE_ALARM_TICK
+                        }
+                        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                        val pendingIntent = PendingIntent.getBroadcast(applicationContext, 4004, restartIntent, flags)
+                        val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            alarmManager?.setExactAndAllowWhileIdle(
+                                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                                SystemClock.elapsedRealtime() + 1000L,
+                                pendingIntent
+                            )
+                        } else {
+                            alarmManager?.set(
+                                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                                SystemClock.elapsedRealtime() + 1000L,
+                                pendingIntent
+                            )
+                        }
+                    } catch (_: Throwable) {
+                    }
                 }
             } catch (_: Throwable) {
             }

@@ -37,7 +37,27 @@ class BalanceAlarmReceiver : BroadcastReceiver() {
                 if (intent?.action == ACTION_NOTIFICATION_DISMISSED) {
                     NotificationHelper.onNotificationDismissed(appContext)
                     if (config.notificationsEnabled) {
-                        BalanceAlarmScheduler.scheduleNext(appContext, config.notificationIntervalMinutes)
+                        if (config.isSessionActive) {
+                            repository.catchUpSession()
+                        }
+                        val updatedConfig = repository.getOrCreateConfig()
+                        val dateTimeFormat = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault())
+                        val nowFormatted = dateTimeFormat.format(Date())
+
+                        // Re-display immediately so the dynamic island and notification never close or stay dismissed
+                        NotificationHelper.showBalanceNotification(
+                            context = appContext,
+                            balance = updatedConfig.balance,
+                            isSessionActive = updatedConfig.isSessionActive,
+                            formattedDateTime = nowFormatted
+                        )
+
+                        try {
+                            ParkiaForegroundService.startOrUpdate(appContext, forceUpdate = true)
+                        } catch (_: Throwable) {
+                        }
+
+                        BalanceAlarmScheduler.scheduleNext(appContext, updatedConfig.notificationIntervalMinutes)
                     }
                     return@launch
                 }
@@ -65,7 +85,7 @@ class BalanceAlarmReceiver : BroadcastReceiver() {
 
                 // Try to keep or restart foreground service if possible
                 try {
-                    ParkiaForegroundService.startOrUpdate(appContext, forceUpdate = false)
+                    ParkiaForegroundService.startOrUpdate(appContext, forceUpdate = true)
                 } catch (_: Throwable) {
                 }
 

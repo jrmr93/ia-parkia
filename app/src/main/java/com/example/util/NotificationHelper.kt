@@ -138,6 +138,8 @@ object NotificationHelper {
                 .setEnableFloat(false)
                 .setShowNotification(true)
                 .setIslandFirstFloat(false)
+                .setCancel(false)
+                .setReopen(true)
                 .setBaseInfo(
                     title = balanceOnlyText,
                     content = subtitle
@@ -182,7 +184,35 @@ object NotificationHelper {
                 false
             )
 
-            val jsonParam = hyperBuilder.buildJsonParam()
+            val rawJsonParam = hyperBuilder.buildJsonParam()
+            val jsonParam = try {
+                val rootObj = org.json.JSONObject(rawJsonParam)
+                val paramV2 = if (rootObj.has("param_v2")) rootObj.getJSONObject("param_v2") else null
+                if (paramV2 != null) {
+                    paramV2.put("updatable", isUpdate)
+                    paramV2.put("cancel", false)
+                    paramV2.put("can_cancel", false)
+                    paramV2.put("reopen", true)
+                    paramV2.put("needCloseAnimation", false)
+                }
+                val paramIsland = when {
+                    paramV2?.has("param_island") == true -> paramV2.getJSONObject("param_island")
+                    rootObj.has("param_island") -> rootObj.getJSONObject("param_island")
+                    else -> null
+                }
+                if (paramIsland != null) {
+                    paramIsland.put("islandProperty", 1) // 1 = Ongoing / Persistent status bar island
+                    paramIsland.put("dismissIsland", false)
+                    paramIsland.put("needCloseAnimation", false)
+                    paramIsland.put("slideDismiss", false)
+                    paramIsland.put("canDismiss", false)
+                    paramIsland.put("allowDismiss", false)
+                }
+                rootObj.toString()
+            } catch (_: Throwable) {
+                rawJsonParam
+            }
+
             val resourceBundle = hyperBuilder.buildResourceBundle()
             val customExtras = hyperBuilder.buildCustomExtras()
 
@@ -194,6 +224,14 @@ object NotificationHelper {
             builder.extras.putBoolean("miui.focus.show_notification", true)
             builder.extras.putBoolean("miui.focus.updatable", isUpdate)
             builder.extras.putBoolean("miui.focus.island_first_float", false)
+            builder.extras.putBoolean("miui.focus.cancel", false)
+            builder.extras.putBoolean("miui.focus.can_cancel", false)
+            builder.extras.putBoolean("miui.focus.reopen", true)
+            builder.extras.putBoolean("miui.focus.need_action_cancel", false)
+            builder.extras.putBoolean("miui.focus.slide_dismiss", false)
+            builder.extras.putBoolean("miui.focus.dismiss_island", false)
+            builder.extras.putBoolean("miui.focus.can_slide", false)
+            builder.extras.putBoolean("miui.focus.allow_dismiss", false)
 
             if (carIcon != null) {
                 builder.extras.putParcelable("miui.focus.pic_car_icon", carIcon)
@@ -264,7 +302,10 @@ object NotificationHelper {
             .setStyle(NotificationCompat.BigTextStyle().bigText(detailText))
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setOngoing(true)
+            .setAutoCancel(false)
+            .setLocalOnly(true)
             .setContentIntent(pendingIntent)
             .setDeleteIntent(deletePendingIntent)
             .setOnlyAlertOnce(true)
@@ -276,7 +317,10 @@ object NotificationHelper {
         }
 
         val notification = builder.build()
-        notification.flags = notification.flags or Notification.FLAG_ONGOING_EVENT or Notification.FLAG_NO_CLEAR
+        notification.flags = notification.flags or
+            Notification.FLAG_ONGOING_EVENT or
+            Notification.FLAG_NO_CLEAR or
+            Notification.FLAG_FOREGROUND_SERVICE
         return notification
     }
 
