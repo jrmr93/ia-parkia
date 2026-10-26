@@ -153,25 +153,37 @@ object NotificationHelper {
             // Status bar pill / capsule around camera punch-hole cutout (Dynamic Island)
             hyperBuilder.setSmallIsland("car_icon")
 
-            // Floating expanded island card matching Super Island layout
+            // Compact dual-sided capsule around the camera cutout:
+            // Left of camera: car icon
             val imgTextLeft = io.github.d4viddf.hyperisland_kit.models.ImageTextInfoLeft(
                 type = 1,
                 picInfo = io.github.d4viddf.hyperisland_kit.models.PicInfo(
                     type = 1,
                     pic = "car_icon"
                 ),
-                textInfo = io.github.d4viddf.hyperisland_kit.models.TextInfo(
-                    title = balanceOnlyText,
-                    content = subtitle
-                ),
+                textInfo = null,
                 progressInfo = null
             )
+
+            // Right of camera: user balance text
+            val imgTextRight = io.github.d4viddf.hyperisland_kit.models.ImageTextInfoRight(
+                type = 1,
+                picInfo = null,
+                textInfo = io.github.d4viddf.hyperisland_kit.models.TextInfo(
+                    title = balanceOnlyText,
+                    content = null
+                )
+            )
+
             hyperBuilder.setBigIslandInfo(
-                imgTextLeft,
-                null,
-                null,
-                null,
-                null
+                left = imgTextLeft,
+                right = imgTextRight,
+                centerText = io.github.d4viddf.hyperisland_kit.models.TextInfo(
+                    title = balanceOnlyText,
+                    content = null
+                ),
+                pic = null,
+                progressText = null
             )
 
             hyperBuilder.setIslandConfig(
@@ -203,10 +215,16 @@ object NotificationHelper {
                 if (paramIsland != null) {
                     paramIsland.put("islandProperty", 1) // 1 = Ongoing / Persistent status bar island
                     paramIsland.put("dismissIsland", false)
+                    paramIsland.put("maxSize", false) // Compact shrunk capsule around camera
                     paramIsland.put("needCloseAnimation", false)
                     paramIsland.put("slideDismiss", false)
                     paramIsland.put("canDismiss", false)
                     paramIsland.put("allowDismiss", false)
+                    paramIsland.put("slideHide", false)
+                    paramIsland.put("canHide", false)
+                    paramIsland.put("allowHide", false)
+                    paramIsland.put("canSlide", false)
+                    paramIsland.put("allowSlide", false)
                 }
                 rootObj.toString()
             } catch (_: Throwable) {
@@ -232,6 +250,9 @@ object NotificationHelper {
             builder.extras.putBoolean("miui.focus.dismiss_island", false)
             builder.extras.putBoolean("miui.focus.can_slide", false)
             builder.extras.putBoolean("miui.focus.allow_dismiss", false)
+            builder.extras.putBoolean("miui.focus.slide_hide", false)
+            builder.extras.putBoolean("miui.focus.can_hide", false)
+            builder.extras.putBoolean("miui.focus.allow_hide", false)
 
             if (carIcon != null) {
                 builder.extras.putParcelable("miui.focus.pic_car_icon", carIcon)

@@ -117,13 +117,21 @@ class HyperIslandTest {
         val smallPic = smallIsland.getJSONObject("picInfo")
         assertEquals("miui.focus.pic_car_icon", smallPic.getString("pic"))
 
-        // Big Island Area (Expanded island card attached to island with image on left and balance on right)
+        // Dual-sided compact capsule around the camera cutout
         val bigIsland = paramIsland.getJSONObject("bigIslandArea")
+        // Left side of the camera: Car symbol only
         val imageTextLeft = bigIsland.getJSONObject("imageTextInfoLeft")
         assertEquals("miui.focus.pic_car_icon", imageTextLeft.getJSONObject("picInfo").getString("pic"))
-        val textInfo = imageTextLeft.getJSONObject("textInfo")
-        assertEquals("$25.50", textInfo.getString("title"))
-        assertEquals("Saldo disponible", textInfo.getString("content"))
+        assertFalse("Left side should not contain text, only car symbol", imageTextLeft.has("textInfo"))
+
+        // Right side of the camera: Balance text only
+        val imageTextRight = bigIsland.getJSONObject("imageTextInfoRight")
+        val rightTextInfo = imageTextRight.getJSONObject("textInfo")
+        assertEquals("$25.50", rightTextInfo.getString("title"))
+        assertFalse("Right side should not contain subtitle", rightTextInfo.has("content"))
+
+        // Compact capsule size
+        assertFalse("maxSize must be false to shrink the capsule", paramIsland.getBoolean("maxSize"))
 
         // Picture parcelables exist in extras
         assertTrue("Extras should contain pic_car_icon", notification.extras.containsKey("miui.focus.pic_car_icon"))
@@ -158,9 +166,13 @@ class HyperIslandTest {
         assertEquals("Deuda pendiente", paramV2.getJSONObject("baseInfo").getString("content"))
 
         val bigIsland = paramV2.getJSONObject("param_island").getJSONObject("bigIslandArea")
-        val textInfo = bigIsland.getJSONObject("imageTextInfoLeft").getJSONObject("textInfo")
+        // Left of camera: Car icon
+        val imageTextLeft = bigIsland.getJSONObject("imageTextInfoLeft")
+        assertEquals("miui.focus.pic_car_icon", imageTextLeft.getJSONObject("picInfo").getString("pic"))
+
+        // Right of camera: Negative balance text
+        val textInfo = bigIsland.getJSONObject("imageTextInfoRight").getJSONObject("textInfo")
         assertEquals("-$12.30", textInfo.getString("title"))
-        assertEquals("Deuda pendiente", textInfo.getString("content"))
 
         // Conventional notification alternative shows full details
         val title = notification.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
@@ -274,6 +286,9 @@ class HyperIslandTest {
         assertFalse("miui.focus.dismiss_island must be false", notification.extras.getBoolean("miui.focus.dismiss_island", true))
         assertFalse("miui.focus.can_slide must be false", notification.extras.getBoolean("miui.focus.can_slide", true))
         assertFalse("miui.focus.allow_dismiss must be false", notification.extras.getBoolean("miui.focus.allow_dismiss", true))
+        assertFalse("miui.focus.slide_hide must be false", notification.extras.getBoolean("miui.focus.slide_hide", true))
+        assertFalse("miui.focus.can_hide must be false", notification.extras.getBoolean("miui.focus.can_hide", true))
+        assertFalse("miui.focus.allow_hide must be false", notification.extras.getBoolean("miui.focus.allow_hide", true))
 
         val rootJson = JSONObject(notification.extras.getString("miui.focus.param")!!)
         val paramV2 = rootJson.getJSONObject("param_v2")
@@ -281,8 +296,14 @@ class HyperIslandTest {
 
         assertEquals("islandProperty must be 1 (ongoing persistent island)", 1, paramIsland.getInt("islandProperty"))
         assertFalse("dismissIsland must be false", paramIsland.getBoolean("dismissIsland"))
+        assertFalse("maxSize must be false to keep capsule compact", paramIsland.getBoolean("maxSize"))
         assertFalse("slideDismiss must be false so swiping does not hide island", paramIsland.getBoolean("slideDismiss"))
         assertFalse("canDismiss must be false", paramIsland.getBoolean("canDismiss"))
         assertFalse("allowDismiss must be false", paramIsland.getBoolean("allowDismiss"))
+        assertFalse("slideHide must be false", paramIsland.getBoolean("slideHide"))
+        assertFalse("canHide must be false", paramIsland.getBoolean("canHide"))
+        assertFalse("allowHide must be false", paramIsland.getBoolean("allowHide"))
+        assertFalse("canSlide must be false", paramIsland.getBoolean("canSlide"))
+        assertFalse("allowSlide must be false", paramIsland.getBoolean("allowSlide"))
     }
 }
